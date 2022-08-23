@@ -11,7 +11,7 @@
 *.sln.docstates
 
 # All occurances of .vscode folders
-.vscode
+.vscode/
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
