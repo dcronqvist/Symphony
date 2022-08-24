@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Symphony;
 
 public interface IContentLoader<TMeta> where TMeta : ContentMetadata

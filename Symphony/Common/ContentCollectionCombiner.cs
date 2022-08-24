@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Symphony.Common;
 
 public class ContentCollectionCombiner : IContentCollectionProvider
