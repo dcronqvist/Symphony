@@ -4,12 +4,12 @@ using System.IO;
 
 namespace Symphony.Common;
 
-public class FileSystemContentCollectionProvider : IContentCollectionProvider
+public class DirectoryCollectionProvider : IContentCollectionProvider
 {
     private string _root;
     private Func<string, IContentSource?> _sourceFactory;
 
-    public FileSystemContentCollectionProvider(string root, Func<string, IContentSource> fileToSourceFactory)
+    public DirectoryCollectionProvider(string root, Func<string, IContentSource> fileToSourceFactory)
     {
         _root = root;
         _sourceFactory = fileToSourceFactory;
