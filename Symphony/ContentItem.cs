@@ -20,7 +20,15 @@ public abstract class ContentItem
         Source = source;
     }
 
+    /// <summary>
+    /// Called when the content of this item is updated.
+    /// </summary>
     protected abstract void OnContentUpdated(object newContent);
+
+    /// <summary>
+    /// Called when all content has been loaded. Should perform OpenGL initialization if any is required
+    /// </summary>
+    public abstract void OnAllContentLoaded();
 }
 
 // Can be used for content items, however, it is recommended that you inherit from this class instead and provid

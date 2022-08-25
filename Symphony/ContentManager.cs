@@ -15,6 +15,18 @@ public class ContentStructureErrorEventArgs : EventArgs
     }
 }
 
+public class ContentFailedToLoadErrorEventArgs : EventArgs
+{
+    public string Error { get; }
+    public IContentSource Source { get; }
+
+    public ContentFailedToLoadErrorEventArgs(string error, IContentSource source)
+    {
+        Error = error;
+        Source = source;
+    }
+}
+
 public class ContentManager<TMeta> where TMeta : ContentMetadata
 {
     // Manager specific stuff
@@ -23,7 +35,10 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
     private Dictionary<string, ContentItem> _loadedContentItems;
 
     // Events
+    public event EventHandler? StartedLoading;
     public event EventHandler<ContentStructureErrorEventArgs>? InvalidContentStructureError;
+    public event EventHandler<ContentFailedToLoadErrorEventArgs>? ContentFailedToLoadError;
+    public event EventHandler? FinishedLoading;
 
     public ContentManager(ContentManagerConfiguration<TMeta> configuration)
     {
@@ -64,19 +79,32 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         foreach (var source in sources)
         {
             var meta = this._validMods[source];
-            var loadedItems = this._configuration.ModLoader.LoadContent(meta, source);
 
-            foreach (var loadedItem in loadedItems)
+            try
             {
-                if (this._loadedContentItems.ContainsKey(loadedItem.Identifier))
+                var loadedItems = this._configuration.ModLoader.LoadContent(meta, source);
+
+                foreach (var loadedItem in loadedItems)
                 {
-                    this._loadedContentItems[loadedItem.Identifier].UpdateContent(source, loadedItem.Content);
-                }
-                else
-                {
-                    this._loadedContentItems.Add(loadedItem.Identifier, loadedItem);
+                    if (this._loadedContentItems.ContainsKey(loadedItem.Identifier))
+                    {
+                        this._loadedContentItems[loadedItem.Identifier].UpdateContent(source, loadedItem.Content);
+                    }
+                    else
+                    {
+                        this._loadedContentItems.Add(loadedItem.Identifier, loadedItem);
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(ex.Message, source));
+            }
+        }
+
+        foreach (var kvp in this._loadedContentItems)
+        {
+            kvp.Value.OnAllContentLoaded();
         }
     }
 
