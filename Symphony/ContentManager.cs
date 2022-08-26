@@ -38,6 +38,16 @@ public class LoadingStageEventArgs<TMeta> : EventArgs where TMeta : ContentMetad
     }
 }
 
+public class ContentItemStartedLoadingEventArgs : EventArgs
+{
+    public string ItemPath { get; }
+
+    public ContentItemStartedLoadingEventArgs(string itemPath)
+    {
+        ItemPath = itemPath;
+    }
+}
+
 public class ContentManager<TMeta> where TMeta : ContentMetadata
 {
     // Manager specific stuff
@@ -51,6 +61,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
     public event EventHandler<LoadingStageEventArgs<TMeta>>? FinishedLoadingStage;
     public event EventHandler<ContentStructureErrorEventArgs>? InvalidContentStructureError;
     public event EventHandler<ContentFailedToLoadErrorEventArgs>? ContentFailedToLoadError;
+    public event EventHandler<ContentItemStartedLoadingEventArgs>? ContentItemStartedLoading;
     public event EventHandler? FinishedLoading;
 
     public ContentManager(ContentManagerConfiguration<TMeta> configuration)
@@ -94,6 +105,11 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
         var currentlyLoadedContent = new List<ContentItem>();
 
+        var progress = new Progress<string>((path) =>
+        {
+            this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(path));
+        });
+
         foreach (var stage in stages)
         {
             this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs<TMeta>(stage));
@@ -106,7 +122,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                 {
                     using (var structure = source.GetStructure())
                     {
-                        currentlyLoadedContent = stage.LoadContent(meta, source, structure, currentlyLoadedContent).ToList();
+                        currentlyLoadedContent = stage.LoadContent(meta, source, structure, currentlyLoadedContent, progress).ToList();
                     }
                 }
                 catch (Exception ex)
