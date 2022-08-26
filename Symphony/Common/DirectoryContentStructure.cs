@@ -78,4 +78,9 @@ public class DirectoryContentStructure : IContentStructure
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
+
+    public IEnumerable<string> GetAllFilesInFolder(string folderPath)
+    {
+        return Directory.EnumerateFiles(Path.Combine(_contentRoot, folderPath)).Select(p => Path.GetRelativePath(_contentRoot, p));
+    }
 }

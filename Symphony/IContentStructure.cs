@@ -13,4 +13,5 @@ public interface IContentStructure : IDisposable
     bool TryGetFileStream(string fileInContent, [NotNullWhen(true)] out Stream? stream);
     Stream GetFileStream(string fileInContent);
     IEnumerable<string> GetAllFilesInContent();
+    IEnumerable<string> GetAllFilesInFolder(string folderPath);
 }

@@ -84,4 +84,9 @@ public class ZipFileContentStructure : IContentStructure
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
+
+    public IEnumerable<string> GetAllFilesInFolder(string folderPath)
+    {
+        return this._archive.Entries.Where(e => e.FullName.StartsWith(folderPath)).Select(e => e.FullName);
+    }
 }
