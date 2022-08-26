@@ -32,10 +32,12 @@ public class ContentFailedToLoadErrorEventArgs : EventArgs
 public class LoadingStageEventArgs<TMeta> : EventArgs where TMeta : ContentMetadata
 {
     public IContentLoadingStage<TMeta> Stage { get; }
+    public IEnumerable<ContentItem> CurrentlyLoadedItems { get; }
 
-    public LoadingStageEventArgs(IContentLoadingStage<TMeta> stage)
+    public LoadingStageEventArgs(IContentLoadingStage<TMeta> stage, IEnumerable<ContentItem> currentlyLoadedItems)
     {
         Stage = stage;
+        CurrentlyLoadedItems = currentlyLoadedItems;
     }
 }
 
@@ -118,7 +120,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
         foreach (var stage in stages)
         {
-            this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs<TMeta>(stage));
+            this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs<TMeta>(stage, currentlyLoadedContent));
 
             foreach (var source in sources)
             {
@@ -137,7 +139,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                 }
             }
 
-            this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs<TMeta>(stage));
+            this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs<TMeta>(stage, currentlyLoadedContent));
         }
 
         var removedContent = this._loadedContentItems.ToDictionary(x => x.Key, x => x.Value);
