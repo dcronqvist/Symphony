@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace Symphony;
 
@@ -94,6 +95,11 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                 }
             }
         }
+    }
+
+    public async Task LoadAsync()
+    {
+        await Task.Run(() => this.Load());
     }
 
     public void Load()
