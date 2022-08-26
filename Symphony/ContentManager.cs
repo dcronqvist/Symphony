@@ -32,12 +32,12 @@ public class ContentFailedToLoadErrorEventArgs : EventArgs
 public class LoadingStageEventArgs<TMeta> : EventArgs where TMeta : ContentMetadata
 {
     public IContentLoadingStage<TMeta> Stage { get; }
-    public IEnumerable<ContentItem> CurrentlyLoadedItems { get; }
+    public ContentCollection CurrentlyLoaded { get; }
 
-    public LoadingStageEventArgs(IContentLoadingStage<TMeta> stage, IEnumerable<ContentItem> currentlyLoadedItems)
+    public LoadingStageEventArgs(IContentLoadingStage<TMeta> stage, ContentCollection currentlyLoaded)
     {
         Stage = stage;
-        CurrentlyLoadedItems = currentlyLoadedItems;
+        CurrentlyLoaded = currentlyLoaded;
     }
 }
 
@@ -51,12 +51,61 @@ public class ContentItemStartedLoadingEventArgs : EventArgs
     }
 }
 
+public class ContentCollection
+{
+    private Dictionary<string, ContentItem> _items = new Dictionary<string, ContentItem>();
+
+    public void AddItem(ContentItem item)
+    {
+        _items.Add(item.Identifier, item);
+    }
+
+    public void RemoveItem(string identifier)
+    {
+        _items.Remove(identifier);
+    }
+
+    public ContentItem? GetContentItem(string identifier)
+    {
+        if (this._items.TryGetValue(identifier, out var item))
+        {
+            return item;
+        }
+        else
+        {
+            return null;
+        }
+    }
+
+    public T? GetContentItem<T>(string identifier) where T : ContentItem
+    {
+        if (this._items.TryGetValue(identifier, out var item))
+        {
+            return (T)item;
+        }
+        else
+        {
+            return null;
+        }
+    }
+
+    public ContentCollection GetCopy()
+    {
+        var copy = new ContentCollection();
+        foreach (var item in _items)
+        {
+            copy.AddItem(item.Value);
+        }
+        return copy;
+    }
+}
+
 public class ContentManager<TMeta> where TMeta : ContentMetadata
 {
     // Manager specific stuff
     private readonly ContentManagerConfiguration<TMeta> _configuration;
     private Dictionary<IContentSource, TMeta> _validMods;
-    private Dictionary<string, ContentItem> _loadedContentItems;
+    private ContentCollection _loadedContent;
 
     // Events
     public event EventHandler? StartedLoading;
@@ -71,7 +120,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
     {
         this._configuration = configuration;
         this._validMods = new Dictionary<IContentSource, TMeta>();
-        this._loadedContentItems = new Dictionary<string, ContentItem>();
+        this._loadedContent = new ContentCollection();
     }
 
     private IEnumerable<IContentSource> CollectValidMods()
@@ -111,7 +160,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         var sources = this.CollectValidMods();
         var stages = this._configuration.Loader.GetLoadingStages();
 
-        var currentlyLoadedContent = new List<ContentItem>();
+        var currentlyLoadedContent = new ContentCollection();
 
         var progress = new Progress<string>((path) =>
         {
@@ -130,7 +179,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                 {
                     using (var structure = source.GetStructure())
                     {
-                        currentlyLoadedContent = stage.LoadContent(meta, source, structure, currentlyLoadedContent, progress).ToList();
+                        currentlyLoadedContent = stage.LoadContent(meta, source, structure, currentlyLoadedContent, progress);
                     }
                 }
                 catch (Exception ex)
@@ -142,50 +191,18 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
             this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs<TMeta>(stage, currentlyLoadedContent));
         }
 
-        var removedContent = this._loadedContentItems.ToDictionary(x => x.Key, x => x.Value);
-        foreach (var loaded in currentlyLoadedContent)
-        {
-            removedContent.Remove(loaded.Identifier);
-
-            if (this._loadedContentItems.ContainsKey(loaded.Identifier))
-            {
-                this._loadedContentItems[loaded.Identifier].UpdateContent(loaded.Source, loaded.Content);
-            }
-            else
-            {
-                this._loadedContentItems.Add(loaded.Identifier, loaded);
-            }
-        }
-
-        foreach (var removed in removedContent)
-        {
-            this._loadedContentItems.Remove(removed.Key);
-        }
+        this._loadedContent = currentlyLoadedContent;
 
         this.FinishedLoading?.Invoke(this, EventArgs.Empty);
     }
 
     public ContentItem? GetContentItem(string identifier)
     {
-        if (this._loadedContentItems.TryGetValue(identifier, out var item))
-        {
-            return item;
-        }
-        else
-        {
-            return null;
-        }
+        return this._loadedContent.GetContentItem(identifier);
     }
 
     public T? GetContentItem<T>(string identifier) where T : ContentItem
     {
-        if (this._loadedContentItems.TryGetValue(identifier, out var item))
-        {
-            return (T)item;
-        }
-        else
-        {
-            return null;
-        }
+        return this._loadedContent.GetContentItem<T>(identifier);
     }
 }

@@ -6,7 +6,7 @@ namespace Symphony;
 public interface IContentLoadingStage<TMeta> where TMeta : ContentMetadata
 {
     string StageName { get; }
-    IEnumerable<ContentItem> LoadContent(TMeta metadata, IContentSource source, IContentStructure structure, IEnumerable<ContentItem> currentLoadedContent, IProgress<string> progress);
+    ContentCollection LoadContent(TMeta metadata, IContentSource source, IContentStructure structure, ContentCollection currentLoadedContent, IProgress<string> progress);
 }
 
 public interface IContentLoader<TMeta> where TMeta : ContentMetadata
