@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Symphony;
 
@@ -27,6 +28,16 @@ public class ContentFailedToLoadErrorEventArgs : EventArgs
     }
 }
 
+public class LoadingStageEventArgs<TMeta> : EventArgs where TMeta : ContentMetadata
+{
+    public IContentLoadingStage<TMeta> Stage { get; }
+
+    public LoadingStageEventArgs(IContentLoadingStage<TMeta> stage)
+    {
+        Stage = stage;
+    }
+}
+
 public class ContentManager<TMeta> where TMeta : ContentMetadata
 {
     // Manager specific stuff
@@ -36,6 +47,8 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
     // Events
     public event EventHandler? StartedLoading;
+    public event EventHandler<LoadingStageEventArgs<TMeta>>? StartedLoadingStage;
+    public event EventHandler<LoadingStageEventArgs<TMeta>>? FinishedLoadingStage;
     public event EventHandler<ContentStructureErrorEventArgs>? InvalidContentStructureError;
     public event EventHandler<ContentFailedToLoadErrorEventArgs>? ContentFailedToLoadError;
     public event EventHandler? FinishedLoading;
@@ -51,13 +64,13 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
     {
         this._validMods.Clear();
 
-        var modSources = this._configuration.ModCollectionProvider.GetModSources();
+        var modSources = this._configuration.CollectionProvider.GetModSources();
 
         foreach (var source in modSources)
         {
             using (var structure = source.GetStructure())
             {
-                if (this._configuration.ModStructureValidator.TryValidateMod(structure, out var metadata, out string? error))
+                if (this._configuration.StructureValidator.TryValidateMod(structure, out var metadata, out string? error))
                 {
                     // Mod is valid and can be loaded
                     this._validMods.Add(source, metadata);
@@ -74,38 +87,58 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
     public void Load()
     {
+        this.StartedLoading?.Invoke(this, EventArgs.Empty);
+
         var sources = this.CollectValidMods();
+        var stages = this._configuration.Loader.GetLoadingStages();
 
-        foreach (var source in sources)
+        var currentlyLoadedContent = new List<ContentItem>();
+
+        foreach (var stage in stages)
         {
-            var meta = this._validMods[source];
+            this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs<TMeta>(stage));
 
-            try
+            foreach (var source in sources)
             {
-                var loadedItems = this._configuration.ModLoader.LoadContent(meta, source);
+                var meta = this._validMods[source];
 
-                foreach (var loadedItem in loadedItems)
+                try
                 {
-                    if (this._loadedContentItems.ContainsKey(loadedItem.Identifier))
+                    using (var structure = source.GetStructure())
                     {
-                        this._loadedContentItems[loadedItem.Identifier].UpdateContent(source, loadedItem.Content);
-                    }
-                    else
-                    {
-                        this._loadedContentItems.Add(loadedItem.Identifier, loadedItem);
+                        currentlyLoadedContent = stage.LoadContent(meta, source, structure, currentlyLoadedContent).ToList();
                     }
                 }
+                catch (Exception ex)
+                {
+                    this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(ex.Message, source));
+                }
             }
-            catch (Exception ex)
+
+            this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs<TMeta>(stage));
+        }
+
+        var removedContent = this._loadedContentItems.ToDictionary(x => x.Key, x => x.Value);
+        foreach (var loaded in currentlyLoadedContent)
+        {
+            removedContent.Remove(loaded.Identifier);
+
+            if (this._loadedContentItems.ContainsKey(loaded.Identifier))
             {
-                this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(ex.Message, source));
+                this._loadedContentItems[loaded.Identifier].UpdateContent(loaded.Source, loaded.Content);
+            }
+            else
+            {
+                this._loadedContentItems.Add(loaded.Identifier, loaded);
             }
         }
 
-        foreach (var kvp in this._loadedContentItems)
+        foreach (var removed in removedContent)
         {
-            kvp.Value.OnAllContentLoaded();
+            this._loadedContentItems.Remove(removed.Key);
         }
+
+        this.FinishedLoading?.Invoke(this, EventArgs.Empty);
     }
 
     public ContentItem? GetContentItem(string identifier)
