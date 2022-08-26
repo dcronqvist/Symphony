@@ -225,4 +225,9 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
     {
         return this._loadedContent.GetContentItem<T>(identifier);
     }
+
+    public IEnumerable<ContentItem> GetContentItems()
+    {
+        return this._loadedContent.GetItems();
+    }
 }
