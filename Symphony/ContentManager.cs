@@ -55,6 +55,11 @@ public class ContentCollection
 {
     private Dictionary<string, ContentItem> _items = new Dictionary<string, ContentItem>();
 
+    public bool HasItem(string identifier)
+    {
+        return _items.ContainsKey(identifier);
+    }
+
     public void AddItem(ContentItem item)
     {
         _items.Add(item.Identifier, item);
@@ -97,6 +102,11 @@ public class ContentCollection
             copy.AddItem(item.Value);
         }
         return copy;
+    }
+
+    public IEnumerable<ContentItem> GetItems()
+    {
+        return _items.Values;
     }
 }
 
@@ -191,7 +201,17 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
             this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs<TMeta>(stage, currentlyLoadedContent));
         }
 
-        this._loadedContent = currentlyLoadedContent;
+        foreach (var item in currentlyLoadedContent.GetItems())
+        {
+            if (this._loadedContent.HasItem(item.Identifier))
+            {
+                this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
+            }
+            else
+            {
+                this._loadedContent.AddItem(item);
+            }
+        }
 
         this.FinishedLoading?.Invoke(this, EventArgs.Empty);
     }
