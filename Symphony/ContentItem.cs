@@ -38,4 +38,11 @@ public abstract class ContentItem<T> : ContentItem
     {
         get { return (T)base.Content; }
     }
+
+    protected override void OnContentUpdated(object newContent)
+    {
+        this.OnContentUpdated((T)newContent);
+    }
+
+    protected abstract void OnContentUpdated(T newContent);
 }
