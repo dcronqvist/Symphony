@@ -94,6 +94,11 @@ public class ContentCollection
         }
     }
 
+    public void ReplaceContentItem(string identifier, ContentItem item)
+    {
+        _items[identifier] = item;
+    }
+
     public ContentCollection GetCopy()
     {
         var copy = new ContentCollection();
@@ -209,11 +214,8 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         {
             if (previouslyLoaded.HasItem(item.Identifier))
             {
+                this._loadedContent.ReplaceContentItem(item.Identifier, previouslyLoaded.GetContentItem(item.Identifier)!);
                 this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
-            }
-            else
-            {
-                this._loadedContent.AddItem(item);
             }
         }
 
