@@ -1,12 +1,13 @@
 using System.Collections.Generic;
-using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Symphony;
 
-public interface IContentLoadingStage<TMeta> where TMeta : ContentMetadata
+public interface IContentLoadingStage
 {
     string StageName { get; }
-    ContentCollection LoadContent(TMeta metadata, IContentSource source, IContentStructure structure, ContentCollection currentLoadedContent, IProgress<string> progress);
+    IEnumerable<ContentEntry> GetAffectedEntries(IEnumerable<ContentEntry> allEntries);
+    bool TryLoadEntry(IContentStructure structure, ContentEntry entry, [NotNullWhen(false)] out string? error, [NotNullWhen(true)] out ContentItem? item);
 }
 
 public interface IContentLoader<TMeta> where TMeta : ContentMetadata
@@ -15,5 +16,5 @@ public interface IContentLoader<TMeta> where TMeta : ContentMetadata
     // /// Load the content from the mod source, if any error occurs, throw an exception and it will be caught by the ContentManager.
     // /// </summary>
     // IEnumerable<ContentItem> LoadContent(TMeta metadata, IContentSource source);
-    IEnumerable<IContentLoadingStage<TMeta>> GetLoadingStages();
+    IEnumerable<IContentLoadingStage> GetLoadingStages();
 }

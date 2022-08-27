@@ -21,40 +21,6 @@ public class ZipFileContentStructure : IContentStructure
         _archive = new ZipArchive(_streamForArchive);
     }
 
-    public IEnumerable<string> GetAllFilesInContent()
-    {
-        return _archive.Entries.Select(e => e.FullName);
-    }
-
-    public Stream GetFileStream(string fileInContent)
-    {
-        return _archive.GetEntry(fileInContent)!.Open();
-    }
-
-    public bool HasFile(string fileInContent)
-    {
-        return this._archive.Entries.Any(e => e.FullName == fileInContent);
-    }
-
-    public bool HasFolder(string folderInContent)
-    {
-        return this._archive.Entries.Any(e => e.FullName.StartsWith(folderInContent));
-    }
-
-    public bool TryGetFileStream(string fileInContent, [NotNullWhen(true)] out Stream? stream)
-    {
-        if (HasFile(fileInContent))
-        {
-            stream = GetFileStream(fileInContent);
-            return true;
-        }
-        else
-        {
-            stream = null;
-            return false;
-        }
-    }
-
     protected virtual void Dispose(bool disposing)
     {
         if (!disposedValue)
@@ -85,8 +51,59 @@ public class ZipFileContentStructure : IContentStructure
         GC.SuppressFinalize(this);
     }
 
-    public IEnumerable<string> GetAllFilesInFolder(string folderPath)
+    public bool HasEntry(string entryPath)
     {
-        return this._archive.Entries.Where(e => e.FullName.StartsWith(folderPath)).Select(e => e.FullName);
+        return _archive.Entries.Any(x => x.FullName == entryPath);
+    }
+
+    public bool TryGetEntry(string entryPath, [NotNullWhen(true)] out ContentEntry? entry)
+    {
+        if (HasEntry(entryPath))
+        {
+            entry = new ContentEntry(entryPath);
+            return true;
+        }
+        else
+        {
+            entry = null;
+            return false;
+        }
+    }
+
+    public ContentEntry GetEntry(string entryPath)
+    {
+        return new ContentEntry(entryPath);
+    }
+
+    public IEnumerable<ContentEntry> GetEntries(Predicate<ContentEntry>? filter = null)
+    {
+        return _archive.Entries.Select(x => new ContentEntry(x.FullName)).Where(x => filter == null || filter(x));
+    }
+
+    public bool TryGetEntryStream(string entryPath, [NotNullWhen(true)] out ContentEntry? entry, [NotNullWhen(true)] out Stream? stream)
+    {
+        if (HasEntry(entryPath))
+        {
+            entry = new ContentEntry(entryPath);
+            stream = _archive.GetEntry(entryPath)!.Open();
+            return true;
+        }
+        else
+        {
+            entry = null;
+            stream = null;
+            return false;
+        }
+    }
+
+    public Stream GetEntryStream(string entryPath, out ContentEntry entry)
+    {
+        entry = new ContentEntry(entryPath);
+        return _archive.GetEntry(entryPath)!.Open();
+    }
+
+    public DateTime GetLastWriteTimeForEntry(string entryPath)
+    {
+        return _archive.GetEntry(entryPath)!.LastWriteTime.DateTime;
     }
 }

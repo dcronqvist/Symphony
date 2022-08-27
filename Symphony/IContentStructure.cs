@@ -8,10 +8,11 @@ namespace Symphony;
 
 public interface IContentStructure : IDisposable
 {
-    bool HasFile(string fileInContent);
-    bool HasFolder(string folderInContent);
-    bool TryGetFileStream(string fileInContent, [NotNullWhen(true)] out Stream? stream);
-    Stream GetFileStream(string fileInContent);
-    IEnumerable<string> GetAllFilesInContent();
-    IEnumerable<string> GetAllFilesInFolder(string folderPath);
+    bool HasEntry(string entryPath);
+    bool TryGetEntry(string entryPath, [NotNullWhen(true)] out ContentEntry? entry);
+    ContentEntry GetEntry(string entryPath);
+    IEnumerable<ContentEntry> GetEntries(Predicate<ContentEntry>? filter = null);
+    bool TryGetEntryStream(string entryPath, [NotNullWhen(true)] out ContentEntry? entry, [NotNullWhen(true)] out Stream? stream);
+    Stream GetEntryStream(string entryPath, out ContentEntry entry);
+    DateTime GetLastWriteTimeForEntry(string entryPath);
 }

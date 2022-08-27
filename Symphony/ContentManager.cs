@@ -29,12 +29,12 @@ public class ContentFailedToLoadErrorEventArgs : EventArgs
     }
 }
 
-public class LoadingStageEventArgs<TMeta> : EventArgs where TMeta : ContentMetadata
+public class LoadingStageEventArgs : EventArgs
 {
-    public IContentLoadingStage<TMeta> Stage { get; }
+    public IContentLoadingStage Stage { get; }
     public ContentCollection CurrentlyLoaded { get; }
 
-    public LoadingStageEventArgs(IContentLoadingStage<TMeta> stage, ContentCollection currentlyLoaded)
+    public LoadingStageEventArgs(IContentLoadingStage stage, ContentCollection currentlyLoaded)
     {
         Stage = stage;
         CurrentlyLoaded = currentlyLoaded;
@@ -53,26 +53,50 @@ public class ContentItemStartedLoadingEventArgs : EventArgs
 
 public class ContentCollection
 {
-    private Dictionary<string, ContentItem> _items = new Dictionary<string, ContentItem>();
+    // From content item identifier to entry.
+    private Dictionary<string, ContentEntry> _entries = new Dictionary<string, ContentEntry>();
+
+    // From entry to item
+    private Dictionary<ContentEntry, ContentItem> _items = new Dictionary<ContentEntry, ContentItem>();
 
     public bool HasItem(string identifier)
     {
-        return _items.ContainsKey(identifier);
+        var entry = this._entries.GetValueOrDefault(identifier);
+        return entry != null;
     }
 
-    public void AddItem(ContentItem item)
+    public ContentEntry GetEntryForItem(string identifier)
     {
-        _items.Add(item.Identifier, item);
+        var entry = this._entries.GetValueOrDefault(identifier);
+        if (entry == null)
+        {
+            throw new KeyNotFoundException($"No entry found for item {identifier}");
+        }
+        return entry;
+    }
+
+    public void AddItem(ContentEntry entry, ContentItem item)
+    {
+        this._entries.Add(item.Identifier, entry);
+        this._items.Add(entry, item);
     }
 
     public void RemoveItem(string identifier)
     {
-        _items.Remove(identifier);
+        var entry = this._entries.GetValueOrDefault(identifier);
+        if (entry == null)
+            return;
+        this._entries.Remove(identifier);
+        this._items.Remove(entry);
     }
 
     public ContentItem? GetContentItem(string identifier)
     {
-        if (this._items.TryGetValue(identifier, out var item))
+        var entry = this._entries.GetValueOrDefault(identifier);
+        if (entry == null)
+            return null;
+
+        if (this._items.TryGetValue(entry, out var item))
         {
             return item;
         }
@@ -84,7 +108,11 @@ public class ContentCollection
 
     public T? GetContentItem<T>(string identifier) where T : ContentItem
     {
-        if (this._items.TryGetValue(identifier, out var item))
+        var entry = this._entries.GetValueOrDefault(identifier);
+        if (entry == null)
+            return null;
+
+        if (this._items.TryGetValue(entry, out var item))
         {
             return (T)item;
         }
@@ -96,7 +124,10 @@ public class ContentCollection
 
     public void ReplaceContentItem(string identifier, ContentItem item)
     {
-        _items[identifier] = item;
+        var entry = this._entries.GetValueOrDefault(identifier);
+        if (entry == null)
+            return;
+        this._items[entry] = item;
     }
 
     public ContentCollection GetCopy()
@@ -104,7 +135,7 @@ public class ContentCollection
         var copy = new ContentCollection();
         foreach (var item in _items)
         {
-            copy.AddItem(item.Value);
+            copy.AddItem(item.Key, item.Value);
         }
         return copy;
     }
@@ -124,8 +155,8 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
     // Events
     public event EventHandler? StartedLoading;
-    public event EventHandler<LoadingStageEventArgs<TMeta>>? StartedLoadingStage;
-    public event EventHandler<LoadingStageEventArgs<TMeta>>? FinishedLoadingStage;
+    public event EventHandler<LoadingStageEventArgs>? StartedLoadingStage;
+    public event EventHandler<LoadingStageEventArgs>? FinishedLoadingStage;
     public event EventHandler<ContentStructureErrorEventArgs>? InvalidContentStructureError;
     public event EventHandler<ContentFailedToLoadErrorEventArgs>? ContentFailedToLoadError;
     public event EventHandler<ContentItemStartedLoadingEventArgs>? ContentItemStartedLoading;
@@ -186,7 +217,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
         foreach (var stage in stages)
         {
-            this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs<TMeta>(stage, currentlyLoadedContent));
+            this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, currentlyLoadedContent));
 
             foreach (var source in sources)
             {
@@ -196,7 +227,20 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                 {
                     using (var structure = source.GetStructure())
                     {
-                        currentlyLoadedContent = stage.LoadContent(meta, source, structure, currentlyLoadedContent, progress);
+                        var affectedEntries = stage.GetAffectedEntries(structure.GetEntries());
+
+                        foreach (var entry in affectedEntries)
+                        {
+                            if (stage.TryLoadEntry(structure, entry, out string? error, out ContentItem? item))
+                            {
+                                currentlyLoadedContent.AddItem(entry, item);
+                                entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
+                            }
+                            else
+                            {
+                                this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(error, source));
+                            }
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -207,7 +251,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
             this._loadedContent = currentlyLoadedContent;
 
-            this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs<TMeta>(stage, currentlyLoadedContent));
+            this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, currentlyLoadedContent));
         }
 
         foreach (var item in currentlyLoadedContent.GetItems())
@@ -235,5 +279,72 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
     public IEnumerable<ContentItem> GetContentItems()
     {
         return this._loadedContent.GetItems();
+    }
+
+    public void HotReloadNewContent()
+    {
+        var content = this._loadedContent;
+
+        var items = content.GetItems().ToList();
+
+        var toReload = new List<ContentItem>();
+
+        foreach (var item in items)
+        {
+            var identifier = item.Identifier;
+            var entry = content.GetEntryForItem(identifier);
+
+            var source = item.Source;
+
+            using (var structure = source.GetStructure())
+            {
+                var lastWriteTime = structure.GetLastWriteTimeForEntry(entry.EntryPath);
+
+                if (lastWriteTime > entry.LastWriteTime)
+                {
+                    // Needs reload
+                    toReload.Add(item);
+                }
+            }
+        }
+
+        var stages = this._configuration.Loader.GetLoadingStages();
+        var currentlyLoadedContent = new ContentCollection();
+
+        foreach (var stage in stages)
+        {
+            foreach (var item in toReload)
+            {
+                var source = item.Source;
+                var entry = content.GetEntryForItem(item.Identifier);
+
+                using (var structure = source.GetStructure())
+                {
+                    var affectedEntries = stage.GetAffectedEntries(new List<ContentEntry> { entry });
+
+                    foreach (var e in affectedEntries)
+                    {
+                        if (stage.TryLoadEntry(structure, entry, out string? error, out ContentItem? reloadedItem))
+                        {
+                            currentlyLoadedContent.AddItem(entry, reloadedItem);
+                            entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
+                        }
+                        else
+                        {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        foreach (var item in currentlyLoadedContent.GetItems())
+        {
+            if (content.HasItem(item.Identifier))
+            {
+                this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
+                content.GetEntryForItem(item.Identifier).SetLastWriteTime(currentlyLoadedContent.GetEntryForItem(item.Identifier).LastWriteTime);
+            }
+        }
     }
 }

@@ -16,38 +16,69 @@ public class DirectoryContentStructure : IContentStructure
         _contentRoot = contentRoot;
     }
 
-    public IEnumerable<string> GetAllFilesInContent()
+    public bool HasEntry(string entryPath)
     {
-        return Directory.EnumerateFiles(_contentRoot, "*.*", SearchOption.AllDirectories).Select(p => Path.GetRelativePath(_contentRoot, p));
+        return File.Exists(Path.Combine(_contentRoot, entryPath));
     }
 
-    public Stream GetFileStream(string fileInContent)
+    public bool TryGetEntry(string entryPath, [NotNullWhen(true)] out ContentEntry? entry)
     {
-        return File.OpenRead(Path.Combine(_contentRoot, fileInContent));
-    }
-
-    public bool HasFile(string fileInContent)
-    {
-        return File.Exists(Path.Combine(_contentRoot, fileInContent));
-    }
-
-    public bool HasFolder(string folderInContent)
-    {
-        return Directory.Exists(Path.Combine(_contentRoot, folderInContent));
-    }
-
-    public bool TryGetFileStream(string fileInContent, [NotNullWhen(true)] out Stream? stream)
-    {
-        if (HasFile(fileInContent))
+        if (HasEntry(entryPath))
         {
-            stream = GetFileStream(fileInContent);
+            entry = new ContentEntry(entryPath);
             return true;
         }
         else
         {
+            entry = null;
+            return false;
+        }
+    }
+
+    public ContentEntry GetEntry(string entryPath)
+    {
+        return new ContentEntry(entryPath);
+    }
+
+    public IEnumerable<ContentEntry> GetEntries(Predicate<ContentEntry>? filter = null)
+    {
+        var allFiles = Directory.GetFiles(_contentRoot, "*", SearchOption.AllDirectories);
+
+        if (filter is null)
+        {
+            return allFiles.Select(f => new ContentEntry(f));
+        }
+        else
+        {
+            return allFiles.Select(f => new ContentEntry(f)).Where(x => filter(x));
+        }
+    }
+
+    public bool TryGetEntryStream(string entryPath, [NotNullWhen(true)] out ContentEntry? entry, [NotNullWhen(true)] out Stream? stream)
+    {
+        if (HasEntry(entryPath))
+        {
+            entry = new ContentEntry(entryPath);
+            stream = File.OpenRead(Path.Combine(_contentRoot, entryPath));
+            return true;
+        }
+        else
+        {
+            entry = null;
             stream = null;
             return false;
         }
+    }
+
+    public Stream GetEntryStream(string entryPath, out ContentEntry entry)
+    {
+        entry = new ContentEntry(entryPath);
+        return File.OpenRead(Path.Combine(_contentRoot, entryPath));
+    }
+
+    public DateTime GetLastWriteTimeForEntry(string entryPath)
+    {
+        return File.GetLastWriteTime(Path.Combine(_contentRoot, entryPath));
     }
 
     protected virtual void Dispose(bool disposing)
@@ -77,10 +108,5 @@ public class DirectoryContentStructure : IContentStructure
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
-    }
-
-    public IEnumerable<string> GetAllFilesInFolder(string folderPath)
-    {
-        return Directory.EnumerateFiles(Path.Combine(_contentRoot, folderPath), "*.*", SearchOption.AllDirectories).Select(p => Path.GetRelativePath(_contentRoot, p));
     }
 }

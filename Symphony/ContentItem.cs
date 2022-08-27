@@ -7,6 +7,7 @@ public abstract class ContentItem
     public string Identifier { get; private set; }
     public IContentSource Source { get; private set; }
     public object Content { get; private set; }
+    internal DateTime LastModified { get; private set; }
 
     public event EventHandler? ContentUpdated;
 
@@ -23,6 +24,11 @@ public abstract class ContentItem
         Content = content;
         Source = source;
         this.ContentUpdated?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal void SetLastModified(DateTime lastModified)
+    {
+        LastModified = lastModified;
     }
 
     /// <summary>
