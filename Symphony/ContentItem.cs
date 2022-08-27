@@ -1,3 +1,5 @@
+using System;
+
 namespace Symphony;
 
 public abstract class ContentItem
@@ -5,6 +7,8 @@ public abstract class ContentItem
     public string Identifier { get; private set; }
     public IContentSource Source { get; private set; }
     public object Content { get; private set; }
+
+    public event EventHandler? ContentUpdated;
 
     public ContentItem(string identifier, IContentSource source, object content)
     {
@@ -18,6 +22,7 @@ public abstract class ContentItem
         this.OnContentUpdated(content);
         Content = content;
         Source = source;
+        this.ContentUpdated?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
