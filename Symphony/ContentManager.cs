@@ -170,6 +170,8 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         var sources = this.CollectValidMods();
         var stages = this._configuration.Loader.GetLoadingStages();
 
+        var previouslyLoaded = this._loadedContent.GetCopy();
+
         var currentlyLoadedContent = new ContentCollection();
 
         var progress = new Progress<string>((path) =>
@@ -198,12 +200,14 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                 }
             }
 
+            this._loadedContent = currentlyLoadedContent;
+
             this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs<TMeta>(stage, currentlyLoadedContent));
         }
 
         foreach (var item in currentlyLoadedContent.GetItems())
         {
-            if (this._loadedContent.HasItem(item.Identifier))
+            if (previouslyLoaded.HasItem(item.Identifier))
             {
                 this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
             }
