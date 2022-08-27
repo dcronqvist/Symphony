@@ -18,7 +18,7 @@ public class DirectoryContentStructure : IContentStructure
 
     public IEnumerable<string> GetAllFilesInContent()
     {
-        return Directory.EnumerateFiles(_contentRoot).Select(p => Path.GetRelativePath(_contentRoot, p));
+        return Directory.EnumerateFiles(_contentRoot, "*.*", SearchOption.AllDirectories).Select(p => Path.GetRelativePath(_contentRoot, p));
     }
 
     public Stream GetFileStream(string fileInContent)
