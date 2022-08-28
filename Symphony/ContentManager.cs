@@ -179,7 +179,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         {
             using (var structure = source.GetStructure())
             {
-                if (this._configuration.StructureValidator.TryValidateMod(structure, out var metadata, out string? error))
+                if (this._configuration.StructureValidator.TryValidateStructure(structure, out var metadata, out string? error))
                 {
                     // Mod is valid and can be loaded
                     this._validMods.Add(source, metadata);
@@ -231,7 +231,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
                         foreach (var entry in affectedEntries)
                         {
-                            if (stage.TryLoadEntry(structure, entry, out string? error, out ContentItem? item))
+                            if (stage.TryLoadEntry(source, structure, entry, out string? error, out ContentItem? item))
                             {
                                 currentlyLoadedContent.AddItem(entry, item);
                                 entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
@@ -324,7 +324,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
                     foreach (var e in affectedEntries)
                     {
-                        if (stage.TryLoadEntry(structure, entry, out string? error, out ContentItem? reloadedItem))
+                        if (stage.TryLoadEntry(source, structure, entry, out string? error, out ContentItem? reloadedItem))
                         {
                             currentlyLoadedContent.AddItem(entry, reloadedItem);
                             entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));

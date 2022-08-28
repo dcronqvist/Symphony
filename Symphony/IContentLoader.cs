@@ -7,7 +7,7 @@ public interface IContentLoadingStage
 {
     string StageName { get; }
     IEnumerable<ContentEntry> GetAffectedEntries(IEnumerable<ContentEntry> allEntries);
-    bool TryLoadEntry(IContentStructure structure, ContentEntry entry, [NotNullWhen(false)] out string? error, [NotNullWhen(true)] out ContentItem? item);
+    bool TryLoadEntry(IContentSource source, IContentStructure structure, ContentEntry entry, [NotNullWhen(false)] out string? error, [NotNullWhen(true)] out ContentItem? item);
 }
 
 public interface IContentLoader<TMeta> where TMeta : ContentMetadata
