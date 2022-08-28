@@ -46,11 +46,11 @@ public class DirectoryContentStructure : IContentStructure
 
         if (filter is null)
         {
-            return allFiles.Select(f => new ContentEntry(f));
+            return allFiles.Select(f => new ContentEntry(Path.GetRelativePath(_contentRoot, f)));
         }
         else
         {
-            return allFiles.Select(f => new ContentEntry(f)).Where(x => filter(x));
+            return allFiles.Select(f => new ContentEntry(Path.GetRelativePath(_contentRoot, f))).Where(x => filter(x));
         }
     }
 
