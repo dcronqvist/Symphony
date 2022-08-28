@@ -231,10 +231,10 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
                         foreach (var entry in affectedEntries)
                         {
+                            entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
                             if (stage.TryLoadEntry(source, structure, entry, out string? error, out ContentItem? item))
                             {
                                 currentlyLoadedContent.AddItem(entry, item);
-                                entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
                             }
                             else
                             {
@@ -324,10 +324,10 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
                     foreach (var e in affectedEntries)
                     {
+                        entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
                         if (stage.TryLoadEntry(source, structure, entry, out string? error, out ContentItem? reloadedItem))
                         {
                             currentlyLoadedContent.AddItem(entry, reloadedItem);
-                            entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
                         }
                         else
                         {
