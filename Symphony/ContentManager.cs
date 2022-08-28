@@ -194,9 +194,52 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         }
     }
 
-    public async Task LoadAsync()
+    private ContentCollection RunSynchronousLoadingStages()
     {
-        await Task.Run(() => this.Load());
+        var sources = this.CollectValidMods();
+        var loaded = new ContentCollection();
+        var stages = this._configuration.Loader.GetSynchronousStages();
+
+        foreach (var stage in stages)
+        {
+            this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
+
+            foreach (var source in sources)
+            {
+                var meta = this._validMods[source];
+
+                try
+                {
+                    using (var structure = source.GetStructure())
+                    {
+                        var affectedEntries = stage.GetAffectedEntries(structure.GetEntries());
+
+                        foreach (var entry in affectedEntries)
+                        {
+                            entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
+                            if (stage.TryLoadEntry(source, structure, entry, out string? error, out ContentItem? item))
+                            {
+                                loaded.AddItem(entry, item);
+                            }
+                            else
+                            {
+                                this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(error, source));
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(ex.Message, source));
+                }
+            }
+
+            this._loadedContent = loaded;
+
+            this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
+        }
+
+        return loaded;
     }
 
     public void Load()
@@ -208,7 +251,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
         var previouslyLoaded = this._loadedContent.GetCopy();
 
-        var currentlyLoadedContent = new ContentCollection();
+        var currentlyLoadedContent = RunSynchronousLoadingStages();
 
         var progress = new Progress<string>((path) =>
         {
@@ -264,6 +307,71 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         }
 
         this.FinishedLoading?.Invoke(this, EventArgs.Empty);
+    }
+
+    public async Task LoadAsync()
+    {
+        this.StartedLoading?.Invoke(this, EventArgs.Empty);
+
+        var sources = this.CollectValidMods();
+        var stages = this._configuration.Loader.GetLoadingStages();
+
+        var previouslyLoaded = this._loadedContent.GetCopy();
+
+        var currentlyLoadedContent = RunSynchronousLoadingStages();
+
+        await Task.Run(() =>
+        {
+            foreach (var stage in stages)
+            {
+                this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, currentlyLoadedContent));
+
+                foreach (var source in sources)
+                {
+                    var meta = this._validMods[source];
+
+                    try
+                    {
+                        using (var structure = source.GetStructure())
+                        {
+                            var affectedEntries = stage.GetAffectedEntries(structure.GetEntries());
+
+                            foreach (var entry in affectedEntries)
+                            {
+                                entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
+                                if (stage.TryLoadEntry(source, structure, entry, out string? error, out ContentItem? item))
+                                {
+                                    currentlyLoadedContent.AddItem(entry, item);
+                                }
+                                else
+                                {
+                                    this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(error, source));
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(ex.Message, source));
+                    }
+                }
+
+                this._loadedContent = currentlyLoadedContent;
+
+                this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, currentlyLoadedContent));
+            }
+
+            foreach (var item in currentlyLoadedContent.GetItems())
+            {
+                if (previouslyLoaded.HasItem(item.Identifier))
+                {
+                    this._loadedContent.ReplaceContentItem(item.Identifier, previouslyLoaded.GetContentItem(item.Identifier)!);
+                    this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
+                }
+            }
+
+            this.FinishedLoading?.Invoke(this, EventArgs.Empty);
+        });
     }
 
     public ContentItem? GetContentItem(string identifier)
