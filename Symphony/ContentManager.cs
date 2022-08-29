@@ -213,7 +213,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                     {
                         entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
                         this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(entry.EntryPath));
-                        var loadResult = await stage.TryLoadEntry(source, structure, entry);
+                        var loadResult = await Task.Run(() => stage.TryLoadEntry(source, structure, entry));
 
                         if (loadResult.Success)
                         {
