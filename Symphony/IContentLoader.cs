@@ -12,6 +12,5 @@ public interface IContentLoadingStage
 
 public interface IContentLoader<TMeta> where TMeta : ContentMetadata
 {
-    IEnumerable<IContentLoadingStage> GetSynchronousStages();
     IEnumerable<IContentLoadingStage> GetLoadingStages();
 }

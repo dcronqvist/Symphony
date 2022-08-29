@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
@@ -25,41 +26,6 @@ internal class TestContentStructure : IContentStructure
     public TestContentStructure(params TestContentEntry[] entries)
     {
         _entries = entries;
-    }
-
-    public bool HasFile(string fileInContent)
-    {
-        return this._entries.Any(e => e.Name == fileInContent);
-    }
-
-    public bool HasFolder(string folderInContent)
-    {
-        return this._entries.Any(e => e.Name.StartsWith(folderInContent));
-    }
-
-    public bool TryGetFileStream(string fileInContent, [NotNullWhen(true)] out Stream? stream)
-    {
-        if (this.HasFile(fileInContent))
-        {
-            stream = GetFileStream(fileInContent);
-            return true;
-        }
-        else
-        {
-            stream = null;
-            return false;
-        }
-    }
-
-    public Stream GetFileStream(string fileInContent)
-    {
-        var entry = this._entries.First(e => e.Name == fileInContent);
-        return new MemoryStream(entry.Data);
-    }
-
-    public IEnumerable<string> GetAllFilesInContent()
-    {
-        return this._entries.Select(e => e.Name);
     }
 
     protected virtual void Dispose(bool disposing)
@@ -90,5 +56,82 @@ internal class TestContentStructure : IContentStructure
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
         Dispose(disposing: true);
         System.GC.SuppressFinalize(this);
+    }
+
+    public bool HasEntry(string entryPath)
+    {
+        return _entries.Any(e => e.Name == entryPath);
+    }
+
+    public bool TryGetEntry(string entryPath, [NotNullWhen(true)] out ContentEntry? entry)
+    {
+        if (this.HasEntry(entryPath))
+        {
+            entry = new ContentEntry(entryPath);
+            return true;
+        }
+        else
+        {
+            entry = null;
+            return false;
+        }
+    }
+
+    public ContentEntry GetEntry(string entryPath)
+    {
+        if (this.HasEntry(entryPath))
+        {
+            return new ContentEntry(entryPath);
+        }
+        else
+        {
+            throw new KeyNotFoundException($"Entry {entryPath} not found");
+        }
+    }
+
+    public IEnumerable<ContentEntry> GetEntries(Predicate<ContentEntry>? filter = null)
+    {
+        return _entries.Select(e => new ContentEntry(e.Name)).Where(e => filter == null || filter(e));
+    }
+
+    public bool TryGetEntryStream(string entryPath, [NotNullWhen(true)] out ContentEntry? entry, [NotNullWhen(true)] out Stream? stream)
+    {
+        if (this.HasEntry(entryPath))
+        {
+            entry = new ContentEntry(entryPath);
+            stream = new MemoryStream(_entries.First(e => e.Name == entryPath).Data);
+            return true;
+        }
+        else
+        {
+            entry = null;
+            stream = null;
+            return false;
+        }
+    }
+
+    public Stream GetEntryStream(string entryPath, out ContentEntry entry)
+    {
+        if (this.HasEntry(entryPath))
+        {
+            entry = new ContentEntry(entryPath);
+            return new MemoryStream(_entries.First(e => e.Name == entryPath).Data);
+        }
+        else
+        {
+            throw new KeyNotFoundException($"Entry {entryPath} not found");
+        }
+    }
+
+    public DateTime GetLastWriteTimeForEntry(string entryPath)
+    {
+        if (this.HasEntry(entryPath))
+        {
+            return DateTime.Now;
+        }
+        else
+        {
+            throw new KeyNotFoundException($"Entry {entryPath} not found");
+        }
     }
 }
