@@ -197,9 +197,9 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         }
     }
 
-    private ContentCollection RunStage(IEnumerable<IContentSource> sources, IContentLoadingStage stage)
+    private ContentCollection RunStage(IEnumerable<IContentSource> sources, IContentLoadingStage stage, ContentCollection previousLoaded)
     {
-        var loaded = new ContentCollection();
+        var loaded = previousLoaded;
 
         lock (_stageLock)
         {
@@ -253,9 +253,10 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
         var previouslyLoaded = this._loadedContent.GetCopy();
 
+        var currentLoad = new ContentCollection();
         foreach (var stage in stages)
         {
-            this.RunStage(sources, stage);
+            currentLoad = this.RunStage(sources, stage, currentLoad);
         }
 
         foreach (var item in this._loadedContent.GetItems())
