@@ -10,7 +10,7 @@ public struct LoadEntryResult
     public string? Error { get; set; }
     public ContentItem? Item { get; set; }
 
-    internal static LoadEntryResult CreateSuccess(ContentItem item)
+    public static LoadEntryResult CreateSuccess(ContentItem item)
     {
         return new LoadEntryResult
         {
@@ -19,7 +19,7 @@ public struct LoadEntryResult
         };
     }
 
-    internal static LoadEntryResult CreateFailure(string error)
+    public static LoadEntryResult CreateFailure(string error)
     {
         return new LoadEntryResult
         {
