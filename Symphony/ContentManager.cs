@@ -44,10 +44,12 @@ public class LoadingStageEventArgs : EventArgs
 public class ContentItemStartedLoadingEventArgs : EventArgs
 {
     public string ItemPath { get; }
+    public float CurrentStageProgress { get; }
 
-    public ContentItemStartedLoadingEventArgs(string itemPath)
+    public ContentItemStartedLoadingEventArgs(string itemPath, float currentStageProgress)
     {
         ItemPath = itemPath;
+        CurrentStageProgress = currentStageProgress;
     }
 }
 
@@ -208,11 +210,13 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                 using (var structure = source.GetStructure())
                 {
                     var affectedEntries = stage.GetAffectedEntries(structure.GetEntries());
+                    var total = affectedEntries.Count();
+                    var current = 0;
 
                     foreach (var entry in affectedEntries)
                     {
                         entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
-                        this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(entry.EntryPath));
+                        this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(entry.EntryPath, (float)current / total));
                         var loadResult = await Task.Run(() => stage.TryLoadEntry(source, structure, entry));
 
                         if (loadResult.Success)
@@ -225,6 +229,8 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                         {
                             this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(loadResult.Error!, source));
                         }
+
+                        current += 1;
                     }
                 }
             }
