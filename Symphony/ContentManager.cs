@@ -153,9 +153,6 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
     private Dictionary<IContentSource, TMeta> _validMods;
     private ContentCollection _loadedContent;
 
-    // locks
-    private readonly object _stageLock = new object();
-
     // Events
     public event EventHandler? StartedLoading;
     public event EventHandler<LoadingStageEventArgs>? StartedLoadingStage;
@@ -197,54 +194,54 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         }
     }
 
-    private ContentCollection RunStage(IEnumerable<IContentSource> sources, IContentLoadingStage stage, ContentCollection previousLoaded)
+    private async Task<ContentCollection> RunStageAsync(IEnumerable<IContentSource> sources, IContentLoadingStage stage, ContentCollection previousLoaded)
     {
         var loaded = previousLoaded;
 
-        lock (_stageLock)
+        this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
+        stage.OnStageStarted();
+
+        foreach (var source in sources)
         {
-            this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
-            stage.OnStageStarted();
-
-            foreach (var source in sources)
+            try
             {
-                try
+                using (var structure = source.GetStructure())
                 {
-                    using (var structure = source.GetStructure())
-                    {
-                        var affectedEntries = stage.GetAffectedEntries(structure.GetEntries());
+                    var affectedEntries = stage.GetAffectedEntries(structure.GetEntries());
 
-                        foreach (var entry in affectedEntries)
+                    foreach (var entry in affectedEntries)
+                    {
+                        entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
+                        this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(entry.EntryPath));
+                        var loadResult = await stage.TryLoadEntry(source, structure, entry);
+
+                        if (loadResult.Success)
                         {
-                            entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
-                            this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(entry.EntryPath));
-                            if (stage.TryLoadEntry(source, structure, entry, out string? error, out ContentItem? item))
-                            {
-                                item.SetLastModified(entry.LastWriteTime);
-                                loaded.AddItem(entry, item);
-                            }
-                            else
-                            {
-                                this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(error, source));
-                            }
+                            var item = loadResult.Item!;
+                            item.SetLastModified(entry.LastWriteTime);
+                            loaded.AddItem(entry, item);
+                        }
+                        else
+                        {
+                            this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(loadResult.Error!, source));
                         }
                     }
                 }
-                catch (Exception ex)
-                {
-                    this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(ex.Message, source));
-                }
             }
-
-            this._loadedContent = loaded.GetCopy();
-            stage.OnStageCompleted();
-            this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
+            catch (Exception ex)
+            {
+                this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(ex.Message, source));
+            }
         }
+
+        this._loadedContent = loaded.GetCopy();
+        stage.OnStageCompleted();
+        this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
 
         return loaded;
     }
 
-    public void Load()
+    public async Task LoadAsync()
     {
         this.StartedLoading?.Invoke(this, EventArgs.Empty);
 
@@ -256,7 +253,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         var currentLoad = new ContentCollection();
         foreach (var stage in stages)
         {
-            currentLoad = this.RunStage(sources, stage, currentLoad);
+            currentLoad = await this.RunStageAsync(sources, stage, currentLoad);
         }
 
         foreach (var item in this._loadedContent.GetItems())
@@ -270,12 +267,6 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
         this.FinishedLoading?.Invoke(this, EventArgs.Empty);
     }
-
-    public async Task LoadAsync()
-    {
-        await Task.Run(() => this.Load());
-    }
-
 
     // public void Load()
     // {
@@ -426,70 +417,70 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         return this._loadedContent.GetItems();
     }
 
-    public void HotReloadNewContent()
-    {
-        var content = this._loadedContent;
+    // public void HotReloadNewContent()
+    // {
+    //     var content = this._loadedContent;
 
-        var items = content.GetItems().ToList();
+    //     var items = content.GetItems().ToList();
 
-        var toReload = new List<ContentItem>();
+    //     var toReload = new List<ContentItem>();
 
-        foreach (var item in items)
-        {
-            var identifier = item.Identifier;
-            var entry = content.GetEntryForItem(identifier);
+    //     foreach (var item in items)
+    //     {
+    //         var identifier = item.Identifier;
+    //         var entry = content.GetEntryForItem(identifier);
 
-            var source = item.Source;
+    //         var source = item.Source;
 
-            using (var structure = source.GetStructure())
-            {
-                var lastWriteTime = structure.GetLastWriteTimeForEntry(entry.EntryPath);
+    //         using (var structure = source.GetStructure())
+    //         {
+    //             var lastWriteTime = structure.GetLastWriteTimeForEntry(entry.EntryPath);
 
-                if (lastWriteTime > entry.LastWriteTime)
-                {
-                    // Needs reload
-                    toReload.Add(item);
-                }
-            }
-        }
+    //             if (lastWriteTime > entry.LastWriteTime)
+    //             {
+    //                 // Needs reload
+    //                 toReload.Add(item);
+    //             }
+    //         }
+    //     }
 
-        var stages = this._configuration.Loader.GetLoadingStages();
-        var currentlyLoadedContent = new ContentCollection();
+    //     var stages = this._configuration.Loader.GetLoadingStages();
+    //     var currentlyLoadedContent = new ContentCollection();
 
-        foreach (var stage in stages)
-        {
-            foreach (var item in toReload)
-            {
-                var source = item.Source;
-                var entry = content.GetEntryForItem(item.Identifier);
+    //     foreach (var stage in stages)
+    //     {
+    //         foreach (var item in toReload)
+    //         {
+    //             var source = item.Source;
+    //             var entry = content.GetEntryForItem(item.Identifier);
 
-                using (var structure = source.GetStructure())
-                {
-                    var affectedEntries = stage.GetAffectedEntries(new List<ContentEntry> { entry });
+    //             using (var structure = source.GetStructure())
+    //             {
+    //                 var affectedEntries = stage.GetAffectedEntries(new List<ContentEntry> { entry });
 
-                    foreach (var e in affectedEntries)
-                    {
-                        entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
-                        if (stage.TryLoadEntry(source, structure, entry, out string? error, out ContentItem? reloadedItem))
-                        {
-                            currentlyLoadedContent.AddItem(entry, reloadedItem);
-                        }
-                        else
-                        {
-                            return;
-                        }
-                    }
-                }
-            }
-        }
+    //                 foreach (var e in affectedEntries)
+    //                 {
+    //                     entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
+    //                     if (stage.TryLoadEntry(source, structure, entry, out string? error, out ContentItem? reloadedItem))
+    //                     {
+    //                         currentlyLoadedContent.AddItem(entry, reloadedItem);
+    //                     }
+    //                     else
+    //                     {
+    //                         return;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        foreach (var item in currentlyLoadedContent.GetItems())
-        {
-            if (content.HasItem(item.Identifier))
-            {
-                this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
-                content.GetEntryForItem(item.Identifier).SetLastWriteTime(currentlyLoadedContent.GetEntryForItem(item.Identifier).LastWriteTime);
-            }
-        }
-    }
+    //     foreach (var item in currentlyLoadedContent.GetItems())
+    //     {
+    //         if (content.HasItem(item.Identifier))
+    //         {
+    //             this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
+    //             content.GetEntryForItem(item.Identifier).SetLastWriteTime(currentlyLoadedContent.GetEntryForItem(item.Identifier).LastWriteTime);
+    //         }
+    //     }
+    // }
 }
