@@ -204,6 +204,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         lock (_stageLock)
         {
             this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
+            stage.OnStageStarted();
 
             foreach (var source in sources)
             {
@@ -236,6 +237,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
             }
 
             this._loadedContent = loaded.GetCopy();
+            stage.OnStageCompleted();
             this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
         }
 
