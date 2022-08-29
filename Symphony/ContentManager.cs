@@ -215,6 +215,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
                     foreach (var entry in affectedEntries)
                     {
+                        current += 1;
                         entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
                         this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(entry.EntryPath, (float)current / total));
                         var loadResult = await Task.Run(() => stage.TryLoadEntry(source, structure, entry));
@@ -229,8 +230,6 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                         {
                             this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(loadResult.Error!, source));
                         }
-
-                        current += 1;
                     }
                 }
             }
