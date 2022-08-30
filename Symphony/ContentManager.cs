@@ -273,140 +273,6 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         this.FinishedLoading?.Invoke(this, EventArgs.Empty);
     }
 
-    // public void Load()
-    // {
-    //     this.StartedLoading?.Invoke(this, EventArgs.Empty);
-
-    //     var sources = this.CollectValidMods();
-    //     var stages = this._configuration.Loader.GetLoadingStages();
-
-    //     var previouslyLoaded = this._loadedContent.GetCopy();
-
-    //     var currentlyLoadedContent = RunSynchronousLoadingStages();
-
-    //     var progress = new Progress<string>((path) =>
-    //     {
-    //         this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(path));
-    //     });
-
-    //     foreach (var stage in stages)
-    //     {
-    //         this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, currentlyLoadedContent));
-
-    //         foreach (var source in sources)
-    //         {
-    //             var meta = this._validMods[source];
-
-    //             try
-    //             {
-    //                 using (var structure = source.GetStructure())
-    //                 {
-    //                     var affectedEntries = stage.GetAffectedEntries(structure.GetEntries());
-
-    //                     foreach (var entry in affectedEntries)
-    //                     {
-    //                         entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
-    //                         this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(entry.EntryPath));
-    //                         if (stage.TryLoadEntry(source, structure, entry, out string? error, out ContentItem? item))
-    //                         {
-    //                             currentlyLoadedContent.AddItem(entry, item);
-    //                         }
-    //                         else
-    //                         {
-    //                             this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(error, source));
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //             catch (Exception ex)
-    //             {
-    //                 this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(ex.Message, source));
-    //             }
-    //         }
-
-    //         this._loadedContent = currentlyLoadedContent;
-
-    //         this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, currentlyLoadedContent));
-    //     }
-
-    //     foreach (var item in currentlyLoadedContent.GetItems())
-    //     {
-    //         if (previouslyLoaded.HasItem(item.Identifier))
-    //         {
-    //             this._loadedContent.ReplaceContentItem(item.Identifier, previouslyLoaded.GetContentItem(item.Identifier)!);
-    //             this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
-    //         }
-    //     }
-
-    //     this.FinishedLoading?.Invoke(this, EventArgs.Empty);
-    // }
-
-    // public async Task LoadAsync()
-    // {
-    //     this.StartedLoading?.Invoke(this, EventArgs.Empty);
-
-    //     var sources = this.CollectValidMods();
-    //     var stages = this._configuration.Loader.GetLoadingStages();
-
-    //     var previouslyLoaded = this._loadedContent.GetCopy();
-
-    //     var currentlyLoadedContent = RunSynchronousLoadingStages();
-
-    //     await Task.Run(() =>
-    //     {
-    //         foreach (var stage in stages)
-    //         {
-    //             this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, currentlyLoadedContent));
-
-    //             foreach (var source in sources)
-    //             {
-    //                 var meta = this._validMods[source];
-
-    //                 try
-    //                 {
-    //                     using (var structure = source.GetStructure())
-    //                     {
-    //                         var affectedEntries = stage.GetAffectedEntries(structure.GetEntries());
-
-    //                         foreach (var entry in affectedEntries)
-    //                         {
-    //                             entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
-    //                             this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(entry.EntryPath));
-    //                             if (stage.TryLoadEntry(source, structure, entry, out string? error, out ContentItem? item))
-    //                             {
-    //                                 currentlyLoadedContent.AddItem(entry, item);
-    //                             }
-    //                             else
-    //                             {
-    //                                 this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(error, source));
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-    //                 catch (Exception ex)
-    //                 {
-    //                     this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(ex.Message, source));
-    //                 }
-    //             }
-
-    //             this._loadedContent = currentlyLoadedContent;
-
-    //             this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, currentlyLoadedContent));
-    //         }
-
-    //         foreach (var item in currentlyLoadedContent.GetItems())
-    //         {
-    //             if (previouslyLoaded.HasItem(item.Identifier))
-    //             {
-    //                 this._loadedContent.ReplaceContentItem(item.Identifier, previouslyLoaded.GetContentItem(item.Identifier)!);
-    //                 this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
-    //             }
-    //         }
-
-    //         this.FinishedLoading?.Invoke(this, EventArgs.Empty);
-    //     });
-    // }
-
     public ContentItem? GetContentItem(string identifier)
     {
         return this._loadedContent.GetContentItem(identifier);
@@ -422,70 +288,29 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         return this._loadedContent.GetItems();
     }
 
-    // public void HotReloadNewContent()
-    // {
-    //     var content = this._loadedContent;
+    public async Task PollForSourceUpdates()
+    {
+        var itemsToReload = new List<ContentItem>();
 
-    //     var items = content.GetItems().ToList();
+        foreach (var item in this._loadedContent.GetItems())
+        {
+            var entry = this._loadedContent.GetEntryForItem(item.Identifier);
 
-    //     var toReload = new List<ContentItem>();
+            var recordedLastWriteTime = entry.LastWriteTime;
+            using var structure = item.Source.GetStructure();
+            var currentLastWriteTime = structure.GetLastWriteTimeForEntry(entry.EntryPath);
 
-    //     foreach (var item in items)
-    //     {
-    //         var identifier = item.Identifier;
-    //         var entry = content.GetEntryForItem(identifier);
+            if (currentLastWriteTime > recordedLastWriteTime)
+            {
+                itemsToReload.Add(item);
+            }
+        }
 
-    //         var source = item.Source;
+        if (itemsToReload.Count == 0)
+        {
+            return;
+        }
 
-    //         using (var structure = source.GetStructure())
-    //         {
-    //             var lastWriteTime = structure.GetLastWriteTimeForEntry(entry.EntryPath);
-
-    //             if (lastWriteTime > entry.LastWriteTime)
-    //             {
-    //                 // Needs reload
-    //                 toReload.Add(item);
-    //             }
-    //         }
-    //     }
-
-    //     var stages = this._configuration.Loader.GetLoadingStages();
-    //     var currentlyLoadedContent = new ContentCollection();
-
-    //     foreach (var stage in stages)
-    //     {
-    //         foreach (var item in toReload)
-    //         {
-    //             var source = item.Source;
-    //             var entry = content.GetEntryForItem(item.Identifier);
-
-    //             using (var structure = source.GetStructure())
-    //             {
-    //                 var affectedEntries = stage.GetAffectedEntries(new List<ContentEntry> { entry });
-
-    //                 foreach (var e in affectedEntries)
-    //                 {
-    //                     entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
-    //                     if (stage.TryLoadEntry(source, structure, entry, out string? error, out ContentItem? reloadedItem))
-    //                     {
-    //                         currentlyLoadedContent.AddItem(entry, reloadedItem);
-    //                     }
-    //                     else
-    //                     {
-    //                         return;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     foreach (var item in currentlyLoadedContent.GetItems())
-    //     {
-    //         if (content.HasItem(item.Identifier))
-    //         {
-    //             this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
-    //             content.GetEntryForItem(item.Identifier).SetLastWriteTime(currentlyLoadedContent.GetEntryForItem(item.Identifier).LastWriteTime);
-    //         }
-    //     }
-    // }
+        await this.LoadAsync();
+    }
 }
