@@ -55,11 +55,13 @@ public class ContentItemStartedLoadingEventArgs : EventArgs
 
 public class ContentItemReloadedEventArgs : EventArgs
 {
+    public IContentLoadingStage Stage { get; }
     public ContentEntry Entry { get; }
     public ContentItem Item { get; }
 
-    public ContentItemReloadedEventArgs(ContentEntry entry, ContentItem item)
+    public ContentItemReloadedEventArgs(IContentLoadingStage stage, ContentEntry entry, ContentItem item)
     {
+        Stage = stage;
         Entry = entry;
         Item = item;
     }
@@ -332,6 +334,14 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
             {
                 var structure = item.Source.GetStructure();
                 var entry = this._loadedContent.GetEntryForItem(item.Identifier);
+
+                var isAffectedInStage = stage.GetAffectedEntries(new List<ContentEntry>() { entry }).Count() > 0;
+
+                if (!isAffectedInStage)
+                {
+                    continue;
+                }
+
                 var loadResult = await Task.Run(() => stage.TryLoadEntry(item.Source, structure, entry));
                 if (loadResult.Success)
                 {
@@ -339,7 +349,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                     newItem.SetLastModified(structure.GetLastWriteTimeForEntry(entry.EntryPath));
                     entry.SetLastWriteTime(newItem.LastModified);
                     this._loadedContent.ReplaceContentItem(item.Identifier, newItem);
-                    this.ContentItemReloaded?.Invoke(this, new ContentItemReloadedEventArgs(entry, newItem));
+                    this.ContentItemReloaded?.Invoke(this, new ContentItemReloadedEventArgs(stage, entry, newItem));
                 }
             }
         }
