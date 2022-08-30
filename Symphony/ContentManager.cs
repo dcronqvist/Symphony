@@ -53,6 +53,18 @@ public class ContentItemStartedLoadingEventArgs : EventArgs
     }
 }
 
+public class ContentItemReloadedEventArgs : EventArgs
+{
+    public ContentEntry Entry { get; }
+    public ContentItem Item { get; }
+
+    public ContentItemReloadedEventArgs(ContentEntry entry, ContentItem item)
+    {
+        Entry = entry;
+        Item = item;
+    }
+}
+
 public class ContentCollection
 {
     // From content item identifier to entry.
@@ -162,6 +174,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
     public event EventHandler<ContentStructureErrorEventArgs>? InvalidContentStructureError;
     public event EventHandler<ContentFailedToLoadErrorEventArgs>? ContentFailedToLoadError;
     public event EventHandler<ContentItemStartedLoadingEventArgs>? ContentItemStartedLoading;
+    public event EventHandler<ContentItemReloadedEventArgs>? ContentItemReloaded;
     public event EventHandler? FinishedLoading;
 
     public ContentManager(ContentManagerConfiguration<TMeta> configuration)
@@ -311,6 +324,24 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
             return;
         }
 
-        await this.LoadAsync();
+        var stages = this._configuration.Loader.GetLoadingStages();
+
+        foreach (var stage in stages)
+        {
+            foreach (var item in itemsToReload)
+            {
+                var structure = item.Source.GetStructure();
+                var entry = this._loadedContent.GetEntryForItem(item.Identifier);
+                var loadResult = await Task.Run(() => stage.TryLoadEntry(item.Source, structure, entry));
+                if (loadResult.Success)
+                {
+                    var newItem = loadResult.Item!;
+                    newItem.SetLastModified(structure.GetLastWriteTimeForEntry(entry.EntryPath));
+                    entry.SetLastWriteTime(newItem.LastModified);
+                    this._loadedContent.ReplaceContentItem(item.Identifier, newItem);
+                    this.ContentItemReloaded?.Invoke(this, new ContentItemReloadedEventArgs(entry, newItem));
+                }
+            }
+        }
     }
 }
