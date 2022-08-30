@@ -346,9 +346,9 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                 if (loadResult.Success)
                 {
                     var newItem = loadResult.Item!;
-                    newItem.SetLastModified(structure.GetLastWriteTimeForEntry(entry.EntryPath));
-                    entry.SetLastWriteTime(newItem.LastModified);
-                    this._loadedContent.ReplaceContentItem(item.Identifier, newItem);
+                    this._loadedContent.GetContentItem(newItem.Identifier)!.UpdateContent(newItem.Source, newItem.Content);
+                    this._loadedContent.GetContentItem(newItem.Identifier)!.SetLastModified(structure.GetLastWriteTimeForEntry(entry.EntryPath));
+                    entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
                     this.ContentItemReloaded?.Invoke(this, new ContentItemReloadedEventArgs(stage, entry, newItem));
                 }
             }
