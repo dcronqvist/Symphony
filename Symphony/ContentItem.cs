@@ -35,6 +35,11 @@ public abstract class ContentItem
     /// Called when the content of this item is updated.
     /// </summary>
     protected abstract void OnContentUpdated(object newContent);
+
+    /// <summary>
+    /// Called when the content of this item is supposed to be unloaded.
+    /// </summary>
+    public abstract void Unload();
 }
 
 // Can be used for content items, however, it is recommended that you inherit from this class instead and provid
