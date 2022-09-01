@@ -354,4 +354,12 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
             }
         }
     }
+
+    public void UnloadAllContent()
+    {
+        foreach (var item in this._loadedContent.GetItems())
+        {
+            item.Unload();
+        }
+    }
 }
