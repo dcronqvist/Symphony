@@ -60,6 +60,11 @@ public class ContentLoadingTests
         {
         }
 
+        public override void Unload()
+        {
+
+        }
+
         protected override void OnContentUpdated(string newContent)
         {
             // Do nothing
@@ -77,73 +82,30 @@ public class ContentLoadingTests
             return allEntries;
         }
 
-        public bool TryLoadEntry(IContentSource source, IContentStructure structure, ContentEntry entry, [NotNullWhen(false)] out string? error, [NotNullWhen(true)] out ContentItem? item)
+        public void OnStageCompleted()
+        {
+
+        }
+
+        public void OnStageStarted()
+        {
+
+        }
+
+        public async IAsyncEnumerable<LoadEntryResult> TryLoadEntry(IContentSource source, IContentStructure structure, ContentEntry entry)
         {
             if (structure.TryGetEntryStream(entry.EntryPath, out var e, out var stream))
             {
-                try
+                var entryName = Path.GetFileName(e.EntryPath);
+                using (var reader = new StreamReader(stream))
                 {
-                    var entryName = Path.GetFileName(e.EntryPath);
-                    using (var reader = new StreamReader(stream))
-                    {
-                        item = new TestValueUpdatesContentItem($"{source.GetIdentifier()}.{entryName}", source, reader.ReadToEnd());
-                        error = null;
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    error = $"Failed to read: {ex.Message}";
-                    item = null;
-                    return false;
+                    var item = new TestValueUpdatesContentItem($"{source.GetIdentifier()}.{entryName}", source, reader.ReadToEnd());
+                    yield return await LoadEntryResult.CreateSuccessAsync(item);
                 }
             }
             else
             {
-                error = $"Missing {entry.EntryPath}";
-                item = null;
-                return false;
-            }
-        }
-    }
-
-    class AsyncStage : IContentLoadingStage
-    {
-        public string StageName => "AsyncStage";
-
-        public bool RunAsync => true;
-
-        public IEnumerable<ContentEntry> GetAffectedEntries(IEnumerable<ContentEntry> allEntries)
-        {
-            return allEntries;
-        }
-
-        public bool TryLoadEntry(IContentSource source, IContentStructure structure, ContentEntry entry, [NotNullWhen(false)] out string? error, [NotNullWhen(true)] out ContentItem? item)
-        {
-            if (structure.TryGetEntryStream(entry.EntryPath, out var e, out var stream))
-            {
-                try
-                {
-                    var entryName = Path.GetFileName(e.EntryPath);
-                    using (var reader = new StreamReader(stream))
-                    {
-                        item = new TestValueUpdatesContentItem($"{source.GetIdentifier()}.{entryName}", source, reader.ReadToEnd());
-                        error = null;
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    error = $"Failed to read: {ex.Message}";
-                    item = null;
-                    return false;
-                }
-            }
-            else
-            {
-                error = $"Missing {entry.EntryPath}";
-                item = null;
-                return false;
+                yield return await LoadEntryResult.CreateFailureAsync($"Failed to load entry {entry.EntryPath}");
             }
         }
     }
@@ -152,8 +114,6 @@ public class ContentLoadingTests
     {
         public IEnumerable<IContentLoadingStage> GetLoadingStages()
         {
-            yield return new SyncStage();
-            yield return new AsyncStage();
             yield return new SyncStage();
         }
     }

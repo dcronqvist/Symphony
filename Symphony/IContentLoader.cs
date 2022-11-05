@@ -27,6 +27,16 @@ public struct LoadEntryResult
             Error = error
         };
     }
+
+    public static async Task<LoadEntryResult> CreateSuccessAsync(ContentItem item)
+    {
+        return await Task.FromResult(CreateSuccess(item));
+    }
+
+    public static async Task<LoadEntryResult> CreateFailureAsync(string error)
+    {
+        return await Task.FromResult(CreateFailure(error));
+    }
 }
 
 public interface IContentLoadingStage
@@ -34,7 +44,7 @@ public interface IContentLoadingStage
     string StageName { get; }
     IEnumerable<ContentEntry> GetAffectedEntries(IEnumerable<ContentEntry> allEntries);
     void OnStageStarted();
-    Task<LoadEntryResult> TryLoadEntry(IContentSource source, IContentStructure structure, ContentEntry entry);
+    IAsyncEnumerable<LoadEntryResult> TryLoadEntry(IContentSource source, IContentStructure structure, ContentEntry entry);
     void OnStageCompleted();
 }
 
