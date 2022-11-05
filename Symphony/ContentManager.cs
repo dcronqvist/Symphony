@@ -69,11 +69,13 @@ public class ContentItemReloadedEventArgs : EventArgs
 
 public class ContentCollection
 {
+    // Every content entry can consist of multiple items, so we need to store these efficiently.
+
     // From content item identifier to entry.
     private Dictionary<string, ContentEntry> _entries = new Dictionary<string, ContentEntry>();
 
-    // From entry to item
-    private Dictionary<ContentEntry, ContentItem> _items = new Dictionary<ContentEntry, ContentItem>();
+    // From entry to items
+    private Dictionary<ContentEntry, Dictionary<string, ContentItem>> _items = new Dictionary<ContentEntry, Dictionary<string, ContentItem>>();
 
     public bool HasItem(string identifier)
     {
@@ -94,7 +96,13 @@ public class ContentCollection
     public void AddItem(ContentEntry entry, ContentItem item)
     {
         this._entries.Add(item.Identifier, entry);
-        this._items.Add(entry, item);
+
+        if (!this._items.ContainsKey(entry))
+        {
+            this._items.Add(entry, new());
+        }
+
+        this._items[entry].Add(item.Identifier, item);
     }
 
     public void RemoveItem(string identifier)
@@ -112,9 +120,9 @@ public class ContentCollection
         if (entry == null)
             return null;
 
-        if (this._items.TryGetValue(entry, out var item))
+        if (this._items.TryGetValue(entry, out var itemDict))
         {
-            return item;
+            return itemDict[identifier];
         }
         else
         {
@@ -128,9 +136,9 @@ public class ContentCollection
         if (entry == null)
             return null;
 
-        if (this._items.TryGetValue(entry, out var item))
+        if (this._items.TryGetValue(entry, out var itemDict))
         {
-            return (T)item;
+            return itemDict[identifier] as T;
         }
         else
         {
@@ -143,7 +151,7 @@ public class ContentCollection
         var entry = this._entries.GetValueOrDefault(identifier);
         if (entry == null)
             return;
-        this._items[entry] = item;
+        this._items[entry][identifier] = item;
     }
 
     public ContentCollection GetCopy()
@@ -151,14 +159,17 @@ public class ContentCollection
         var copy = new ContentCollection();
         foreach (var item in _items)
         {
-            copy.AddItem(item.Key, item.Value);
+            foreach (var (k, v) in item.Value)
+            {
+                copy.AddItem(item.Key, v);
+            }
         }
         return copy;
     }
 
     public IEnumerable<ContentItem> GetItems()
     {
-        return _items.Values;
+        return _items.Values.Select(x => x.Values).SelectMany(x => x);
     }
 }
 
