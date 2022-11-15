@@ -317,26 +317,9 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         return this._loadedContent.GetItems();
     }
 
-    private IEnumerable<(ContentEntry, IContentStructure, IContentSource)> DiscoverNewEntries()
-    {
-        var currentEntries = this._loadedContent.GetItems().Select(i => this._loadedContent.GetEntryForItem(i.Identifier));
-        var foundEntries = new List<(ContentEntry, IContentStructure, IContentSource)>();
-        var sources = this.CollectValidMods();
-
-        foreach (var source in sources)
-        {
-            foundEntries.AddRange(source.GetStructure().GetEntries().Select(e => (e, source.GetStructure(), source)));
-        }
-
-        return foundEntries.Where(e => !currentEntries.Contains(e.Item1));
-    }
-
     public async Task PollForSourceUpdates()
     {
         var itemsToReload = new List<ContentItem>();
-
-        // Discover new entries is sources, if any new content has been added
-        var newEntries = this.DiscoverNewEntries();
 
         foreach (var item in this._loadedContent.GetItems())
         {
@@ -384,35 +367,6 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                         this._loadedContent.GetContentItem(newItem.Identifier)!.SetLastModified(structure.GetLastWriteTimeForEntry(entry.EntryPath));
                         entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
                         this.ContentItemReloaded?.Invoke(this, new ContentItemReloadedEventArgs(stage, entry, newItem));
-                    }
-                }
-            }
-        }
-
-        foreach (var stage in stages)
-        {
-            foreach (var (entry, structure, source) in newEntries)
-            {
-                var isAffectedInStage = stage.GetAffectedEntries(new List<ContentEntry>() { entry }).Count() > 0;
-
-                if (!isAffectedInStage)
-                {
-                    continue;
-                }
-
-                var loadResult = await Task.Run(() => stage.TryLoadEntry(source, structure, entry));
-
-                await foreach (var result in loadResult)
-                {
-                    if (result.Success)
-                    {
-                        var item = result.Item!;
-                        item.SetLastModified(entry.LastWriteTime);
-                        _loadedContent.AddItem(entry, item);
-                    }
-                    else
-                    {
-                        this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(result.Error!, source));
                     }
                 }
             }
