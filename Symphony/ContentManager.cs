@@ -302,6 +302,96 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         this.FinishedLoading?.Invoke(this, EventArgs.Empty);
     }
 
+    public ContentCollection RunStage(IEnumerable<IContentSource> sources, IContentLoadingStage stage, ContentCollection previousLoaded)
+    {
+        var loaded = previousLoaded;
+
+        this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
+        stage.OnStageStarted();
+
+        foreach (var source in sources)
+        {
+            try
+            {
+                using (var structure = source.GetStructure())
+                {
+                    var affectedEntries = stage.GetAffectedEntries(structure.GetEntries());
+                    var total = affectedEntries.Count();
+                    var current = 0;
+
+                    foreach (var entry in affectedEntries)
+                    {
+                        current += 1;
+                        entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
+                        this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(entry.EntryPath, (float)current / total));
+                        var loadResult = Task.Run(() => stage.TryLoadEntry(source, structure, entry)).Result;
+
+                        var results = Task.Run(async () =>
+                        {
+                            var l = new List<LoadEntryResult>();
+                            await foreach (var r in loadResult)
+                            {
+                                l.Add(r);
+                            }
+                            return l;
+                        }).Result;
+
+                        foreach (var result in results)
+                        {
+                            if (result.Success)
+                            {
+                                var item = result.Item!;
+                                item.SetLastModified(entry.LastWriteTime);
+                                loaded.AddItem(entry, item);
+                            }
+                            else
+                            {
+                                this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(result.Error!, source));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(ex.Message, source));
+            }
+        }
+
+        this._loadedContent = loaded.GetCopy();
+        stage.OnStageCompleted();
+        this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
+
+        return loaded;
+    }
+
+    public void Load()
+    {
+        this.StartedLoading?.Invoke(this, EventArgs.Empty);
+
+        var sources = this.CollectValidMods();
+        var stages = this._configuration.Loader.GetLoadingStages();
+
+        var previouslyLoaded = this._loadedContent.GetCopy();
+
+        var currentLoad = new ContentCollection();
+        foreach (var stage in stages)
+        {
+            currentLoad = this.RunStage(sources, stage, currentLoad);
+        }
+
+        foreach (var item in this._loadedContent.GetItems())
+        {
+            if (previouslyLoaded.HasItem(item.Identifier))
+            {
+                this._loadedContent.ReplaceContentItem(item.Identifier, previouslyLoaded.GetContentItem(item.Identifier)!);
+                this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
+            }
+        }
+
+        this.FinishedLoading?.Invoke(this, EventArgs.Empty);
+    }
+
     public ContentItem? GetContentItem(string identifier)
     {
         return this._loadedContent.GetContentItem(identifier);
