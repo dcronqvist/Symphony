@@ -197,7 +197,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         this._loadedContent = new ContentCollection();
     }
 
-    private IEnumerable<IContentSource> CollectValidMods()
+    public IEnumerable<IContentSource> CollectValidSources()
     {
         this._validMods.Clear();
 
@@ -279,7 +279,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
     {
         this.StartedLoading?.Invoke(this, EventArgs.Empty);
 
-        var sources = this.CollectValidMods();
+        var sources = this.CollectValidSources();
         var stages = this._configuration.Loader.GetLoadingStages();
 
         var previouslyLoaded = this._loadedContent.GetCopy();
@@ -369,7 +369,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
     {
         this.StartedLoading?.Invoke(this, EventArgs.Empty);
 
-        var sources = this.CollectValidMods();
+        var sources = this.CollectValidSources();
         var stages = this._configuration.Loader.GetLoadingStages();
 
         var previouslyLoaded = this._loadedContent.GetCopy();
