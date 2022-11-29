@@ -222,6 +222,11 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         }
     }
 
+    public ContentManagerConfiguration<TMeta> GetConfiguration()
+    {
+        return this._configuration;
+    }
+
     private async Task<ContentCollection> RunStageAsync(IEnumerable<IContentSource> sources, IContentLoadingStage stage, ContentCollection previousLoaded)
     {
         var loaded = previousLoaded;
