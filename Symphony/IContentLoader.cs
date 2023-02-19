@@ -50,5 +50,6 @@ public interface IContentLoadingStage
 
 public interface IContentLoader<TMeta> where TMeta : ContentMetadata
 {
+    IEnumerable<IContentSource> GetSourceLoadOrder(IEnumerable<IContentSource> sources);
     IEnumerable<IContentLoadingStage> GetLoadingStages();
 }

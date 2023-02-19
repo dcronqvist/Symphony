@@ -285,6 +285,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         this.StartedLoading?.Invoke(this, EventArgs.Empty);
 
         var sources = this.CollectValidSources();
+        sources = this._configuration.Loader.GetSourceLoadOrder(sources);
         var stages = this._configuration.Loader.GetLoadingStages();
 
         var previouslyLoaded = this._loadedContent.GetCopy();
@@ -375,6 +376,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         this.StartedLoading?.Invoke(this, EventArgs.Empty);
 
         var sources = this.CollectValidSources();
+        sources = this._configuration.Loader.GetSourceLoadOrder(sources);
         var stages = this._configuration.Loader.GetLoadingStages();
 
         var previouslyLoaded = this._loadedContent.GetCopy();
