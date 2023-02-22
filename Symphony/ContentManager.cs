@@ -542,6 +542,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                     if (result.Success)
                     {
                         var newItem = result.Item!;
+                        newItem.Identifier = item.Identifier;
                         this._loadedContent.GetContentItem(newItem.Identifier!)!.UpdateContent(newItem.Source, newItem.Content);
                         this._loadedContent.GetContentItem(newItem.Identifier!)!.SetLastModified(structure.GetLastWriteTimeForEntry(entry.EntryPath));
                         entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
