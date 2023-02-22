@@ -16,4 +16,9 @@ public sealed class ContentEntry
     {
         LastWriteTime = lastWriteTime;
     }
+
+    public override string ToString()
+    {
+        return $"ContentEntry: {EntryPath} @ {LastWriteTime}";
+    }
 }

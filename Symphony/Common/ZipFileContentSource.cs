@@ -21,4 +21,9 @@ public class ZipFileContentSource : IContentSource
     {
         return new ZipFileContentStructure(this._pathToZip);
     }
+
+    public override string ToString()
+    {
+        return $"ZipSource: {_pathToZip}";
+    }
 }

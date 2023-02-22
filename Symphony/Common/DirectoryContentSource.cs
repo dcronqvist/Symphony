@@ -21,4 +21,9 @@ public class DirectoryContentSource : IContentSource
     {
         return new DirectoryContentStructure(_path);
     }
+
+    public override string ToString()
+    {
+        return $"DirSource: {_path}";
+    }
 }

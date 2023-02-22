@@ -39,6 +39,11 @@ public abstract class ContentItem
     /// Called when the content of this item is supposed to be unloaded.
     /// </summary>
     public abstract void Unload();
+
+    public override string ToString()
+    {
+        return $"ContentItem: {Identifier} @ {LastModified}";
+    }
 }
 
 // Can be used for content items, however, it is recommended that you inherit from this class instead and provid
