@@ -98,6 +98,11 @@ public class ContentCollection
         return entry != null;
     }
 
+    public IEnumerable<ContentEntry> GetEntriesWhere(Func<ContentEntry, bool> predicate)
+    {
+        return this._items.Keys.Where(predicate);
+    }
+
     public ContentEntry GetEntryForItem(string identifier)
     {
         var entry = this._entries.GetValueOrDefault(identifier);
@@ -396,7 +401,13 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         this.StartedLoading?.Invoke(this, EventArgs.Empty);
 
         var sources = this.CollectValidSources();
-        sources = this._configuration.Loader.GetSourceLoadOrder(sources);
+        var sourceList = this._configuration.Loader.GetSourceLoadOrder(sources).ToList();
+
+        var allSourcesAndEntries = sourceList.SelectMany(s => s.GetStructure().GetEntries().Select(e => (s, e))).ToList();
+        var groupByEntryPath = allSourcesAndEntries.GroupBy(x => x.e.EntryPath).ToList();
+
+        var orderedBySourceOrder = groupByEntryPath.Select(x => x.OrderBy(y => sourceList.IndexOf(y.s)).Last()).ToList();
+
         var stages = this._configuration.Loader.GetLoadingStages();
 
         var previouslyLoaded = this._loadedContent.GetCopy();
@@ -415,11 +426,6 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                 this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
             }
         }
-
-        var newEntriesItems = this._configuration.Loader.PostProcessEntries(this._loadedContent.GetEntriesAndItems());
-        var newCollection = new ContentCollection(newEntriesItems);
-
-        this._loadedContent = newCollection;
 
         this.FinishedLoading?.Invoke(this, EventArgs.Empty);
     }
