@@ -77,6 +77,21 @@ public class ContentCollection
     // From entry to items
     private Dictionary<ContentEntry, Dictionary<string, ContentItem>> _items = new Dictionary<ContentEntry, Dictionary<string, ContentItem>>();
 
+    public ContentCollection()
+    {
+    }
+
+    public ContentCollection(IEnumerable<(ContentEntry, ContentItem[])> entries)
+    {
+        foreach (var (entry, items) in entries)
+        {
+            foreach (var item in items)
+            {
+                this.AddItem(entry, item);
+            }
+        }
+    }
+
     public bool HasItem(string identifier)
     {
         var entry = this._entries.GetValueOrDefault(identifier);
@@ -170,6 +185,11 @@ public class ContentCollection
     public IEnumerable<ContentItem> GetItems()
     {
         return _items.Values.Select(x => x.Values).SelectMany(x => x);
+    }
+
+    public IEnumerable<(ContentEntry, ContentItem[])> GetEntriesAndItems()
+    {
+        return _items.Select(x => (x.Key, x.Value.Values.ToArray()));
     }
 }
 
@@ -395,6 +415,11 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                 this._loadedContent.GetContentItem(item.Identifier)!.UpdateContent(item.Source, item.Content);
             }
         }
+
+        var newEntriesItems = this._configuration.Loader.PostProcessEntries(this._loadedContent.GetEntriesAndItems());
+        var newCollection = new ContentCollection(newEntriesItems);
+
+        this._loadedContent = newCollection;
 
         this.FinishedLoading?.Invoke(this, EventArgs.Empty);
     }

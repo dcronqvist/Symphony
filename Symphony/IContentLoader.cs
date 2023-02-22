@@ -52,4 +52,5 @@ public interface IContentLoader<TMeta> where TMeta : ContentMetadata
 {
     IEnumerable<IContentSource> GetSourceLoadOrder(IEnumerable<IContentSource> sources);
     IEnumerable<IContentLoadingStage> GetLoadingStages();
+    IEnumerable<(ContentEntry, ContentItem[])> PostProcessEntries(IEnumerable<(ContentEntry, ContentItem[])> entries);
 }
