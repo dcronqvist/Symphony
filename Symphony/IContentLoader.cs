@@ -9,11 +9,13 @@ public struct LoadEntryResult
     public bool Success { get; set; }
     public string? Error { get; set; }
     public ContentItem? Item { get; set; }
+    public string? Identifier { get; set; }
 
-    public static LoadEntryResult CreateSuccess(ContentItem item)
+    public static LoadEntryResult CreateSuccess(string identifier, ContentItem item)
     {
         return new LoadEntryResult
         {
+            Identifier = identifier,
             Success = true,
             Item = item
         };
@@ -28,9 +30,9 @@ public struct LoadEntryResult
         };
     }
 
-    public static async Task<LoadEntryResult> CreateSuccessAsync(ContentItem item)
+    public static async Task<LoadEntryResult> CreateSuccessAsync(string identifier, ContentItem item)
     {
-        return await Task.FromResult(CreateSuccess(item));
+        return await Task.FromResult(CreateSuccess(identifier, item));
     }
 
     public static async Task<LoadEntryResult> CreateFailureAsync(string error)

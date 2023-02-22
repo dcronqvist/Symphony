@@ -4,16 +4,15 @@ namespace Symphony;
 
 public abstract class ContentItem
 {
-    public string Identifier { get; private set; }
+    public string? Identifier { get; internal set; }
     public IContentSource Source { get; private set; }
     public object Content { get; private set; }
     internal DateTime LastModified { get; private set; }
 
     public event EventHandler? ContentUpdated;
 
-    public ContentItem(string identifier, IContentSource source, object content)
+    public ContentItem(IContentSource source, object content)
     {
-        Identifier = identifier;
         Source = source;
         Content = content;
     }
@@ -45,8 +44,8 @@ public abstract class ContentItem
 // Can be used for content items, however, it is recommended that you inherit from this class instead and provid
 public abstract class ContentItem<T> : ContentItem
 {
-    public ContentItem(string identifier, IContentSource source, T content)
-        : base(identifier, source, content!)
+    public ContentItem(IContentSource source, T content)
+        : base(source, content!)
     {
     }
 

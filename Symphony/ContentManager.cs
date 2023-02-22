@@ -333,23 +333,25 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         this.FinishedLoading?.Invoke(this, EventArgs.Empty);
     }
 
-    public ContentCollection RunStage(IEnumerable<(IContentSource, ContentEntry)> allEntries, IContentLoadingStage stage, ContentCollection previousLoaded)
+    public ContentCollection RunStage(IEnumerable<(IContentSource, IContentSource, ContentEntry)> allEntries, IContentLoadingStage stage, ContentCollection previousLoaded)
     {
+        // First source, actual source to load from, entry
+
         var loaded = previousLoaded;
 
         this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
         stage.OnStageStarted();
 
-        var groupedBySource = allEntries.GroupBy(x => x.Item1);
+        var groupedBySource = allEntries.GroupBy(x => x.Item2);
 
         foreach (var group in groupedBySource)
         {
             try
             {
-                var entriesInGroup = group.Select(x => x.Item2).ToArray();
+                var entriesInGroup = group.Select(x => (x.Item1, x.Item3)).ToArray();
                 using (var structure = group.Key.GetStructure())
                 {
-                    var affectedEntries = stage.GetAffectedEntries(entriesInGroup);
+                    var affectedEntries = stage.GetAffectedEntries(entriesInGroup.Select(x => x.Item2));
                     var total = affectedEntries.Count();
                     var current = 0;
 
@@ -359,6 +361,9 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                         entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
                         this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(entry.EntryPath, (float)current / total));
                         var loadResult = Task.Run(() => stage.TryLoadEntry(group.Key, structure, entry)).Result;
+
+                        var entryIndex = entriesInGroup.Select(x => x.Item2).ToList().IndexOf(entry);
+                        var firstOccurenceSource = entriesInGroup[entryIndex].Item1;
 
                         var results = Task.Run(async () =>
                         {
@@ -375,6 +380,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                             if (result.Success)
                             {
                                 var item = result.Item!;
+                                item.Identifier = $"{firstOccurenceSource.GetIdentifier()}:{result.Identifier}";
                                 item.SetLastModified(entry.LastWriteTime);
                                 loaded.AddItem(entry, item);
                             }
@@ -409,7 +415,11 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         var allSourcesAndEntries = sourceList.SelectMany(s => s.GetStructure().GetEntries().Select(e => (s, e))).ToList();
         var groupByEntryPath = allSourcesAndEntries.GroupBy(x => x.e.EntryPath).ToList();
 
-        var orderedBySourceOrder = groupByEntryPath.Select(x => x.OrderBy(y => sourceList.IndexOf(y.s)).Last()).ToList();
+        var entryPathToFirstSource = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).First().s);
+        var entryPathToLastSource = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).Last().s);
+        var entryPathToLastEntry = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => y.e).Last().e);
+
+        var orderedBySourceOrder = groupByEntryPath.Select(x => (entryPathToFirstSource[x.Key], entryPathToLastSource[x.Key], entryPathToLastEntry[x.Key])).ToList();
 
         var stages = this._configuration.Loader.GetLoadingStages();
 
