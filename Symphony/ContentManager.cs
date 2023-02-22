@@ -53,6 +53,22 @@ public class ContentItemStartedLoadingEventArgs : EventArgs
     }
 }
 
+public class ContentItemFinishedLoadingEventArgs : EventArgs
+{
+    public ContentEntry Entry { get; }
+    public ContentItem Item { get; }
+    public IContentSource FirstOccurence { get; }
+    public IContentSource ContentFrom { get; }
+
+    public ContentItemFinishedLoadingEventArgs(ContentEntry entry, ContentItem item, IContentSource firstOccurence, IContentSource contentFrom)
+    {
+        Entry = entry;
+        Item = item;
+        FirstOccurence = firstOccurence;
+        ContentFrom = contentFrom;
+    }
+}
+
 public class ContentItemReloadedEventArgs : EventArgs
 {
     public IContentLoadingStage Stage { get; }
@@ -212,6 +228,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
     public event EventHandler<ContentStructureErrorEventArgs>? InvalidContentStructureError;
     public event EventHandler<ContentFailedToLoadErrorEventArgs>? ContentFailedToLoadError;
     public event EventHandler<ContentItemStartedLoadingEventArgs>? ContentItemStartedLoading;
+    public event EventHandler<ContentItemFinishedLoadingEventArgs> ContentItemSuccessfullyLoaded;
     public event EventHandler<ContentItemReloadedEventArgs>? ContentItemReloaded;
     public event EventHandler? FinishedLoading;
 
@@ -383,6 +400,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                                 item.Identifier = $"{firstOccurenceSource.GetIdentifier()}:{result.Identifier}";
                                 item.SetLastModified(entry.LastWriteTime);
                                 loaded.AddItem(entry, item);
+                                this.ContentItemSuccessfullyLoaded?.Invoke(this, new ContentItemFinishedLoadingEventArgs(entry, item, firstOccurenceSource, group.Key));
                             }
                             else
                             {
