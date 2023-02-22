@@ -417,7 +417,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
 
         var entryPathToFirstSource = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).First().s);
         var entryPathToLastSource = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).Last().s);
-        var entryPathToLastEntry = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => y.e).Last().e);
+        var entryPathToLastEntry = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).Last().e);
 
         var orderedBySourceOrder = groupByEntryPath.Select(x => (entryPathToFirstSource[x.Key], entryPathToLastSource[x.Key], entryPathToLastEntry[x.Key])).ToList();
 
