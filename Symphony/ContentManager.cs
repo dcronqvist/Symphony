@@ -306,7 +306,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                             if (result.Success)
                             {
                                 var item = result.Item!;
-                                item.Identifier = $"{firstOccurenceSource.GetIdentifier()}:{result.Identifier}";
+                                item.Identifier = $"{this._configuration.Loader.GetIdentifierForSource(firstOccurenceSource)}:{result.Identifier}";
                                 item.SetLastModified(entry.LastWriteTime);
                                 loaded.AddItem(entry, item);
                                 this.ContentItemSuccessfullyLoaded?.Invoke(this, new ContentItemFinishedLoadingEventArgs(entry, item, firstOccurenceSource, group.Key));
@@ -417,7 +417,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
                             if (result.Success)
                             {
                                 var item = result.Item!;
-                                item.Identifier = $"{firstOccurenceSource.GetIdentifier()}:{result.Identifier}";
+                                item.Identifier = $"{this._configuration.Loader.GetIdentifierForSource(firstOccurenceSource)}:{result.Identifier}";
                                 item.SetLastModified(entry.LastWriteTime);
                                 loaded.AddItem(entry, item);
                                 this.ContentItemSuccessfullyLoaded?.Invoke(this, new ContentItemFinishedLoadingEventArgs(entry, item, firstOccurenceSource, group.Key));

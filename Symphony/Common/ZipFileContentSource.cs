@@ -12,11 +12,6 @@ public class ZipFileContentSource : IContentSource
         _pathToZip = pathToZip;
     }
 
-    public string GetIdentifier()
-    {
-        return Path.GetFileNameWithoutExtension(_pathToZip)!;
-    }
-
     public IContentStructure GetStructure()
     {
         return new ZipFileContentStructure(this._pathToZip);

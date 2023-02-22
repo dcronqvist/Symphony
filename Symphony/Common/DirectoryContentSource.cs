@@ -12,11 +12,6 @@ public class DirectoryContentSource : IContentSource
         _path = path;
     }
 
-    public string GetIdentifier()
-    {
-        return _path.Split(Path.DirectorySeparatorChar).Last();
-    }
-
     public IContentStructure GetStructure()
     {
         return new DirectoryContentStructure(_path);
