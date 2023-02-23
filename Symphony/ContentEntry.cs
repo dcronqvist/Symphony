@@ -4,11 +4,17 @@ namespace Symphony;
 
 public sealed class ContentEntry
 {
-    public string EntryPath { get; }
+    private string _entryPath;
+    public string EntryPath
+    {
+        get => _entryPath;
+        private set => _entryPath = value.Replace('\\', '/');
+    }
     public DateTime LastWriteTime { get; private set; }
 
     public ContentEntry(string entryPath)
     {
+        _entryPath = "";
         EntryPath = entryPath;
     }
 
