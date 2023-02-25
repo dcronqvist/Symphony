@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Symphony;
@@ -450,6 +451,8 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         var sources = this.CollectValidSources();
         var sourceList = this._configuration.Loader.GetSourceLoadOrder(sources).ToList();
 
+        var allEntriesToStage = new List<(IContentSource, IContentSource, ContentEntry)>();
+
         var allSourcesAndEntries = sourceList.SelectMany(s => s.GetStructure().GetEntries().Select(e => (s, e))).ToList();
         var groupByEntryPath = allSourcesAndEntries.GroupBy(x => x.e.EntryPath).ToList();
 
@@ -457,7 +460,20 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         var entryPathToLastSource = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).Last().s);
         var entryPathToLastEntry = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).Last().e);
 
-        var orderedBySourceOrder = groupByEntryPath.Select(x => (entryPathToFirstSource[x.Key], entryPathToLastSource[x.Key], entryPathToLastEntry[x.Key])).ToList();
+        foreach (var group in groupByEntryPath)
+        {
+            if (Regex.IsMatch(group.Key, this._configuration.SameEntryPathOverwritesRegex))
+            {
+                allEntriesToStage.Add((entryPathToFirstSource[group.Key], entryPathToLastSource[group.Key], entryPathToLastEntry[group.Key]));
+            }
+            else
+            {
+                foreach (var entry in group)
+                {
+                    allEntriesToStage.Add((entry.s, entry.s, entry.e));
+                }
+            }
+        }
 
         var stages = this._configuration.Loader.GetLoadingStages();
 
@@ -466,7 +482,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         var currentLoad = new ContentCollection();
         foreach (var stage in stages)
         {
-            currentLoad = this.RunStage(orderedBySourceOrder, stage, currentLoad);
+            currentLoad = this.RunStage(allEntriesToStage, stage, currentLoad);
         }
 
         foreach (var item in this._loadedContent.GetItems())
