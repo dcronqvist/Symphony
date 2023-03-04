@@ -17,6 +17,11 @@ public class DirectoryCollectionProvider : IContentCollectionProvider
 
     public IEnumerable<IContentSource> GetModSources()
     {
+        if (!Directory.Exists(_root))
+        {
+            yield break;
+        }
+
         var directories = Directory.EnumerateDirectories(_root);
         var files = Directory.EnumerateFiles(_root);
 
