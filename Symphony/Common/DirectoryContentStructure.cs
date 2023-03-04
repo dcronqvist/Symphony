@@ -42,6 +42,11 @@ public class DirectoryContentStructure : IContentStructure
 
     public IEnumerable<ContentEntry> GetEntries(Predicate<ContentEntry>? filter = null)
     {
+        if (!Directory.Exists(_contentRoot))
+        {
+            return Enumerable.Empty<ContentEntry>();
+        }
+
         var allFiles = Directory.GetFiles(_contentRoot, "*", SearchOption.AllDirectories);
 
         if (filter is null)
