@@ -4,7 +4,7 @@ namespace Symphony;
 
 public abstract class ContentItem
 {
-    public string? Identifier { get; internal set; }
+    public string? Identifier { get; protected internal set; }
     public IContentSource Source { get; private set; }
     public object Content { get; private set; }
     internal DateTime LastModified { get; private set; }
