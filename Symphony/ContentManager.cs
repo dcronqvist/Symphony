@@ -6,85 +6,7 @@ using System.Threading.Tasks;
 
 namespace Symphony;
 
-public class ContentStructureErrorEventArgs : EventArgs
-{
-    public string Error { get; }
-    public IContentSource Source { get; }
-
-    public ContentStructureErrorEventArgs(string error, IContentSource source)
-    {
-        Error = error;
-        Source = source;
-    }
-}
-
-public class ContentFailedToLoadErrorEventArgs : EventArgs
-{
-    public string Error { get; }
-    public IContentSource Source { get; }
-
-    public ContentFailedToLoadErrorEventArgs(string error, IContentSource source)
-    {
-        Error = error;
-        Source = source;
-    }
-}
-
-public class LoadingStageEventArgs : EventArgs
-{
-    public IContentLoadingStage Stage { get; }
-    public ContentCollection CurrentlyLoaded { get; }
-
-    public LoadingStageEventArgs(IContentLoadingStage stage, ContentCollection currentlyLoaded)
-    {
-        Stage = stage;
-        CurrentlyLoaded = currentlyLoaded;
-    }
-}
-
-public class ContentItemStartedLoadingEventArgs : EventArgs
-{
-    public string ItemPath { get; }
-    public float CurrentStageProgress { get; }
-
-    public ContentItemStartedLoadingEventArgs(string itemPath, float currentStageProgress)
-    {
-        ItemPath = itemPath;
-        CurrentStageProgress = currentStageProgress;
-    }
-}
-
-public class ContentItemFinishedLoadingEventArgs : EventArgs
-{
-    public ContentEntry Entry { get; }
-    public ContentItem Item { get; }
-    public IContentSource FirstOccurence { get; }
-    public IContentSource ContentFrom { get; }
-
-    public ContentItemFinishedLoadingEventArgs(ContentEntry entry, ContentItem item, IContentSource firstOccurence, IContentSource contentFrom)
-    {
-        Entry = entry;
-        Item = item;
-        FirstOccurence = firstOccurence;
-        ContentFrom = contentFrom;
-    }
-}
-
-public class ContentItemReloadedEventArgs : EventArgs
-{
-    public IContentLoadingStage Stage { get; }
-    public ContentEntry Entry { get; }
-    public ContentItem Item { get; }
-
-    public ContentItemReloadedEventArgs(IContentLoadingStage stage, ContentEntry entry, ContentItem item)
-    {
-        Stage = stage;
-        Entry = entry;
-        Item = item;
-    }
-}
-
-public class ContentCollection
+internal class ContentCollection
 {
     // Every content entry can consist of multiple items, so we need to store these efficiently.
 
@@ -167,19 +89,19 @@ public class ContentCollection
         }
     }
 
-    public T? GetContentItem<T>(string identifier) where T : ContentItem
+    public T? GetContentItem<T>(string identifier) where T : IContent
     {
         var entry = this._entries.GetValueOrDefault(identifier);
         if (entry == null)
-            return null;
+            return default;
 
         if (this._items.TryGetValue(entry, out var itemDict))
         {
-            return itemDict[identifier] as T;
+            return (T)itemDict[identifier].Content;
         }
         else
         {
-            return null;
+            return default;
         }
     }
 
@@ -215,309 +137,152 @@ public class ContentCollection
     }
 }
 
-public class ContentManager<TMeta> where TMeta : ContentMetadata
+public class ContentManager<TMeta>
 {
-    // Manager specific stuff
-    private readonly ContentManagerConfiguration<TMeta> _configuration;
-    private Dictionary<IContentSource, TMeta> _validMods;
-    private ContentCollection _loadedContent;
+    private readonly IContentStructureValidator<TMeta> _structureValidator;
+    private readonly IEnumerable<IContentSource> _sources;
+    private readonly IContentLoader _loader;
+    private readonly IContentOverwriter _overwriter;
+    private readonly bool _hotReload;
 
-    // Events
-    public event EventHandler? StartedLoading;
-    public event EventHandler<LoadingStageEventArgs>? StartedLoadingStage;
-    public event EventHandler<LoadingStageEventArgs>? FinishedLoadingStage;
-    public event EventHandler<ContentStructureErrorEventArgs>? InvalidContentStructureError;
-    public event EventHandler<ContentFailedToLoadErrorEventArgs>? ContentFailedToLoadError;
-    public event EventHandler<ContentItemStartedLoadingEventArgs>? ContentItemStartedLoading;
-    public event EventHandler<ContentItemFinishedLoadingEventArgs>? ContentItemSuccessfullyLoaded;
-    public event EventHandler<ContentItemReloadedEventArgs>? ContentItemReloaded;
-    public event EventHandler? FinishedLoading;
+    private ContentCollection _loadedContent = new();
 
-    public ContentManager(ContentManagerConfiguration<TMeta> configuration)
+    public ContentManager(IContentStructureValidator<TMeta> structureValidator, IEnumerable<IContentSource> sources, IContentLoader loader, IContentOverwriter overwriter, bool hotReload)
     {
-        this._configuration = configuration;
-        this._validMods = new Dictionary<IContentSource, TMeta>();
-        this._loadedContent = new ContentCollection();
+        this._structureValidator = structureValidator;
+        this._sources = sources;
+        this._loader = loader;
+        this._overwriter = overwriter;
+        this._hotReload = hotReload;
     }
 
-    public IEnumerable<IContentSource> CollectValidSources()
+    private IEnumerable<IContentSource> CollectSourcesWithValidStructures()
     {
-        this._validMods.Clear();
-
-        var modSources = this._configuration.CollectionProvider.GetModSources();
-
-        foreach (var source in modSources)
+        foreach (var source in this._sources)
         {
-            using (var structure = source.GetStructure())
-            {
-                if (this._configuration.StructureValidator.TryValidateStructure(structure, out var metadata, out string? error))
-                {
-                    // Mod is valid and can be loaded
-                    this._validMods.Add(source, metadata);
-                    yield return source;
-                }
-                else
-                {
-                    // Mod is invalid and cannot be loaded
-                    this.InvalidContentStructureError?.Invoke(this, new ContentStructureErrorEventArgs(error, source));
-                }
-            }
+            var structure = source.GetStructure();
+
+            if (!_structureValidator.TryValidateStructure(structure, out TMeta? meta, out string? validationError))
+                continue;
+
+            yield return source;
         }
     }
 
-    public ContentManagerConfiguration<TMeta> GetConfiguration()
+    private async Task<ContentCollection> RunStageAsync(IEnumerable<(IContentSource firstSource, IContentSource lastSource, ContentEntry lastSourceEntry)> allEntries, IContentLoadingStage stage, ContentCollection previousLoaded)
     {
-        return this._configuration;
-    }
+        var loaded = previousLoaded.GetCopy();
+        var allEntriesGroupedByLastSource = allEntries.GroupBy(x => x.lastSource);
 
-    private async Task<ContentCollection> RunStageAsync(IEnumerable<(IContentSource, IContentSource, ContentEntry)> allEntries, IContentLoadingStage stage, ContentCollection previousLoaded)
-    {
-        // First source, actual source to load from, entry
-
-        var loaded = previousLoaded;
-
-        this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
-        stage.OnStageStarted();
-
-        var groupedBySource = allEntries.GroupBy(x => x.Item2);
-
-        foreach (var group in groupedBySource)
+        foreach (var grouping in allEntriesGroupedByLastSource)
         {
-            try
+            var groupingLastSource = grouping.Key;
+            var lastSourceIdentifier = this._loader.GetIdentifierForSource(groupingLastSource);
+            var firstSourceIdentifier = this._loader.GetIdentifierForSource(grouping.First().firstSource);
+
+            using var lastSourceStructure = groupingLastSource.GetStructure();
+
+            var affectedEntries = grouping.Where(x => stage.IsEntryAffectedByStage(x.lastSourceEntry.EntryPath)).ToList();
+
+            foreach (var affectedEntry in affectedEntries)
             {
-                var entriesInGroup = group.Select(x => (x.Item1, x.Item3)).ToArray();
-                using (var structure = group.Key.GetStructure())
+                IContentSource firstSource = affectedEntry.firstSource;
+                IContentSource lastSource = affectedEntry.lastSource;
+                ContentEntry lastSourceEntry = affectedEntry.lastSourceEntry;
+
+                lastSourceEntry.LastWriteTime = lastSourceStructure.GetLastWriteTimeForEntry(lastSourceEntry.EntryPath);
+
+                var entryLoadResults = await Task.Run(() => stage.LoadEntry(lastSourceEntry, lastSourceStructure.GetEntryStream(lastSourceEntry.EntryPath)));
+
+                await foreach (var loadResult in entryLoadResults)
                 {
-                    var affectedEntries = stage.GetAffectedEntries(entriesInGroup.Select(x => x.Item2));
-                    var total = affectedEntries.Count();
-                    var current = 0;
+                    if (!loadResult.Success)
+                        continue;
 
-                    foreach (var entry in affectedEntries)
-                    {
-                        current += 1;
-                        entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
-                        this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(entry.EntryPath, (float)current / total));
-                        var loadResult = Task.Run(() => stage.TryLoadEntry(group.Key, structure, entry)).Result;
+                    var content = loadResult.Content!;
+                    var itemIdentifier = $"{firstSourceIdentifier}:{loadResult.ItemIdentifier}";
 
-                        var entryIndex = entriesInGroup.Select(x => x.Item2).ToList().IndexOf(entry);
-                        var firstOccurenceSource = entriesInGroup[entryIndex].Item1;
-
-                        await foreach (var result in loadResult)
-                        {
-                            if (result.Success)
-                            {
-                                var item = result.Item!;
-                                item.Identifier = $"{this._configuration.Loader.GetIdentifierForSource(firstOccurenceSource)}:{result.Identifier}";
-                                item.SetLastModified(entry.LastWriteTime);
-                                loaded.AddItem(entry, item);
-                                this.ContentItemSuccessfullyLoaded?.Invoke(this, new ContentItemFinishedLoadingEventArgs(entry, item, firstOccurenceSource, group.Key));
-                            }
-                            else
-                            {
-                                this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(result.Error!, group.Key));
-                            }
-                        }
-                    }
+                    var newContentItem = new ContentItem(itemIdentifier, firstSource, lastSource, content);
+                    loaded.AddItem(lastSourceEntry, newContentItem);
                 }
             }
-            catch (Exception ex)
-            {
-                this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(ex.Message, group.Key));
-            }
         }
-
-        this._loadedContent = loaded.GetCopy();
-        stage.OnStageCompleted();
-        this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
 
         return loaded;
+    }
+
+    private IEnumerable<ContentEntry> GetAllEntriesFromSource(IContentSource source)
+    {
+        return source.GetStructure().GetEntries(entry => true);
     }
 
     public async Task LoadAsync()
     {
-        this.StartedLoading?.Invoke(this, EventArgs.Empty);
+        var validSources = this.CollectSourcesWithValidStructures();
+        var validSourcesOrdered = this._loader.GetSourceLoadOrder(validSources).ToList();
 
-        var sources = this.CollectValidSources();
-        var sourceList = this._configuration.Loader.GetSourceLoadOrder(sources).ToList();
+        var allEntriesWithTheirSource = validSourcesOrdered
+            .SelectMany(source => this.GetAllEntriesFromSource(source)
+                                  .Select(entry => (source, entry))).ToList();
 
-        var allEntriesToStage = new List<(IContentSource, IContentSource, ContentEntry)>();
+        var entriesGroupedByEntryPath = allEntriesWithTheirSource.GroupBy(pair => pair.entry.EntryPath).ToList();
 
-        var allSourcesAndEntries = sourceList.SelectMany(s => s.GetStructure().GetEntries().Select(e => (s, e))).ToList();
-        var groupByEntryPath = allSourcesAndEntries.GroupBy(x => x.e.EntryPath).ToList();
+        var entryPathToFirstSource = entriesGroupedByEntryPath
+            .ToDictionary(grouping => grouping.Key, x => x.OrderBy(y => validSourcesOrdered.IndexOf(y.source)).First().source);
 
-        var entryPathToFirstSource = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).First().s);
-        var entryPathToLastSource = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).Last().s);
-        var entryPathToLastEntry = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).Last().e);
+        var entryPathToLastSource = entriesGroupedByEntryPath
+            .ToDictionary(grouping => grouping.Key, x => x.OrderBy(y => validSourcesOrdered.IndexOf(y.source)).Last().source);
 
-        foreach (var group in groupByEntryPath)
+        var entryPathToLastSourceEntry = entriesGroupedByEntryPath
+            .ToDictionary(grouping => grouping.Key, x => x.OrderBy(y => validSourcesOrdered.IndexOf(y.source)).Last().entry);
+
+        var entriesToLoad = new List<(IContentSource firstSource, IContentSource lastSource, ContentEntry entry)>();
+
+        foreach (var grouping in entriesGroupedByEntryPath)
         {
-            if (Regex.IsMatch(group.Key, this._configuration.SameEntryPathOverwritesRegex))
+            string entryPath = grouping.Key;
+
+            if (_overwriter.IsEntryAffectedByOverwrite(entryPath))
             {
-                allEntriesToStage.Add((entryPathToFirstSource[group.Key], entryPathToLastSource[group.Key], entryPathToLastEntry[group.Key]));
+                entriesToLoad.Add((entryPathToFirstSource[entryPath], entryPathToLastSource[entryPath], entryPathToLastSourceEntry[entryPath]));
             }
             else
             {
-                foreach (var entry in group)
+                foreach (var entry in grouping)
                 {
-                    allEntriesToStage.Add((entry.s, entry.s, entry.e));
+                    entriesToLoad.Add((entry.source, entry.source, entry.entry));
                 }
             }
         }
 
-        var stages = this._configuration.Loader.GetLoadingStages();
+        var stagesToRun = this._loader.GetLoadingStages();
 
-        var previouslyLoaded = this._loadedContent.GetCopy();
+        var previouslyLoadedContent = this._loadedContent.GetCopy();
 
-        var currentLoad = new ContentCollection();
-        foreach (var stage in stages)
+        var newLoadedContent = new ContentCollection();
+        foreach (var stage in stagesToRun)
         {
-            currentLoad = await this.RunStageAsync(allEntriesToStage, stage, currentLoad);
+            newLoadedContent = await this.RunStageAsync(entriesToLoad, stage, newLoadedContent);
         }
+
+        this._loadedContent = newLoadedContent;
 
         foreach (var item in this._loadedContent.GetItems())
         {
-            if (previouslyLoaded.HasItem(item.Identifier!))
+            if (previouslyLoadedContent.HasItem(item.Identifier!))
             {
-                this._loadedContent.ReplaceContentItem(item.Identifier!, previouslyLoaded.GetContentItem(item.Identifier!)!);
-                this._loadedContent.GetContentItem(item.Identifier!)!.UpdateContent(item.Source, item.Content);
+                this._loadedContent.ReplaceContentItem(item.Identifier!, previouslyLoadedContent.GetContentItem(item.Identifier!)!);
+                this._loadedContent.GetContentItem(item.Identifier!)!.UpdateContent(item.Content);
             }
         }
-
-        this.FinishedLoading?.Invoke(this, EventArgs.Empty);
     }
 
-    public ContentCollection RunStage(IEnumerable<(IContentSource, IContentSource, ContentEntry)> allEntries, IContentLoadingStage stage, ContentCollection previousLoaded)
+    public IContent? GetContent(string identifier)
     {
-        // First source, actual source to load from, entry
-
-        var loaded = previousLoaded;
-
-        this.StartedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
-        stage.OnStageStarted();
-
-        var groupedBySource = allEntries.GroupBy(x => x.Item2);
-
-        foreach (var group in groupedBySource)
-        {
-            try
-            {
-                var entriesInGroup = group.Select(x => (x.Item1, x.Item3)).ToArray();
-                using (var structure = group.Key.GetStructure())
-                {
-                    var affectedEntries = stage.GetAffectedEntries(entriesInGroup.Select(x => x.Item2));
-                    var total = affectedEntries.Count();
-                    var current = 0;
-
-                    foreach (var entry in affectedEntries)
-                    {
-                        current += 1;
-                        entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
-                        this.ContentItemStartedLoading?.Invoke(this, new ContentItemStartedLoadingEventArgs(entry.EntryPath, (float)current / total));
-                        var loadResult = Task.Run(() => stage.TryLoadEntry(group.Key, structure, entry)).Result;
-
-                        var entryIndex = entriesInGroup.Select(x => x.Item2).ToList().IndexOf(entry);
-                        var firstOccurenceSource = entriesInGroup[entryIndex].Item1;
-
-                        var results = Task.Run(async () =>
-                        {
-                            var l = new List<LoadEntryResult>();
-                            await foreach (var r in loadResult)
-                            {
-                                l.Add(r);
-                            }
-                            return l;
-                        }).Result;
-
-                        foreach (var result in results)
-                        {
-                            if (result.Success)
-                            {
-                                var item = result.Item!;
-                                item.Identifier = $"{this._configuration.Loader.GetIdentifierForSource(firstOccurenceSource)}:{result.Identifier}";
-                                item.SetLastModified(entry.LastWriteTime);
-                                loaded.AddItem(entry, item);
-                                this.ContentItemSuccessfullyLoaded?.Invoke(this, new ContentItemFinishedLoadingEventArgs(entry, item, firstOccurenceSource, group.Key));
-                            }
-                            else
-                            {
-                                this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(result.Error!, group.Key));
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                this.ContentFailedToLoadError?.Invoke(this, new ContentFailedToLoadErrorEventArgs(ex.Message, group.Key));
-            }
-        }
-
-        this._loadedContent = loaded.GetCopy();
-        stage.OnStageCompleted();
-        this.FinishedLoadingStage?.Invoke(this, new LoadingStageEventArgs(stage, loaded));
-
-        return loaded;
+        return this._loadedContent.GetContentItem(identifier)!.Content;
     }
 
-    public void Load()
-    {
-        this.StartedLoading?.Invoke(this, EventArgs.Empty);
-
-        var sources = this.CollectValidSources();
-        var sourceList = this._configuration.Loader.GetSourceLoadOrder(sources).ToList();
-
-        var allEntriesToStage = new List<(IContentSource, IContentSource, ContentEntry)>();
-
-        var allSourcesAndEntries = sourceList.SelectMany(s => s.GetStructure().GetEntries().Select(e => (s, e))).ToList();
-        var groupByEntryPath = allSourcesAndEntries.GroupBy(x => x.e.EntryPath).ToList();
-
-        var entryPathToFirstSource = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).First().s);
-        var entryPathToLastSource = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).Last().s);
-        var entryPathToLastEntry = groupByEntryPath.ToDictionary(x => x.Key, x => x.OrderBy(y => sourceList.IndexOf(y.s)).Last().e);
-
-        foreach (var group in groupByEntryPath)
-        {
-            if (Regex.IsMatch(group.Key, this._configuration.SameEntryPathOverwritesRegex))
-            {
-                allEntriesToStage.Add((entryPathToFirstSource[group.Key], entryPathToLastSource[group.Key], entryPathToLastEntry[group.Key]));
-            }
-            else
-            {
-                foreach (var entry in group)
-                {
-                    allEntriesToStage.Add((entry.s, entry.s, entry.e));
-                }
-            }
-        }
-
-        var stages = this._configuration.Loader.GetLoadingStages();
-
-        var previouslyLoaded = this._loadedContent.GetCopy();
-
-        var currentLoad = new ContentCollection();
-        foreach (var stage in stages)
-        {
-            currentLoad = this.RunStage(allEntriesToStage, stage, currentLoad);
-        }
-
-        foreach (var item in this._loadedContent.GetItems())
-        {
-            if (previouslyLoaded.HasItem(item.Identifier!))
-            {
-                this._loadedContent.ReplaceContentItem(item.Identifier!, previouslyLoaded.GetContentItem(item.Identifier!)!);
-                this._loadedContent.GetContentItem(item.Identifier!)!.UpdateContent(item.Source, item.Content);
-            }
-        }
-
-        this.FinishedLoading?.Invoke(this, EventArgs.Empty);
-    }
-
-    public ContentItem? GetContentItem(string identifier)
-    {
-        return this._loadedContent.GetContentItem(identifier);
-    }
-
-    public T? GetContentItem<T>(string identifier) where T : ContentItem
+    public T? GetContent<T>(string identifier) where T : IContent
     {
         return this._loadedContent.GetContentItem<T>(identifier);
     }
@@ -527,7 +292,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
         return this._loadedContent.GetItems();
     }
 
-    public async Task PollForSourceUpdates()
+    public async Task PollForSourceUpdatesAsync()
     {
         var itemsToReload = new List<ContentItem>();
 
@@ -536,7 +301,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
             var entry = this._loadedContent.GetEntryForItem(item.Identifier!);
 
             var recordedLastWriteTime = entry.LastWriteTime;
-            using var structure = item.Source.GetStructure();
+            using var structure = item.FinalSource.GetStructure();
             var currentLastWriteTime = structure.GetLastWriteTimeForEntry(entry.EntryPath);
 
             if (currentLastWriteTime > recordedLastWriteTime)
@@ -550,36 +315,27 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
             return;
         }
 
-        var stages = this._configuration.Loader.GetLoadingStages();
+        var stages = this._loader.GetLoadingStages();
 
+        var updatedContent = new ContentCollection();
         foreach (var stage in stages)
         {
-            foreach (var item in itemsToReload)
+            updatedContent = await RunStageAsync(
+                itemsToReload.Select(i => (i.SourceFirstLoadedIn, i.FinalSource, this._loadedContent.GetEntryForItem(i.Identifier))),
+                stage,
+                updatedContent
+            );
+        }
+
+        foreach (var (updatedEntry, updatedItems) in updatedContent.GetEntriesAndItems())
+        {
+            foreach (var updatedItem in updatedItems)
             {
-                var structure = item.Source.GetStructure();
-                var entry = this._loadedContent.GetEntryForItem(item.Identifier!);
+                var previousItem = this._loadedContent.GetContentItem(updatedItem.Identifier)!;
+                previousItem.UpdateContent(updatedItem.Content);
 
-                var isAffectedInStage = stage.GetAffectedEntries(new List<ContentEntry>() { entry }).Count() > 0;
-
-                if (!isAffectedInStage)
-                {
-                    continue;
-                }
-
-                var loadResult = await Task.Run(() => stage.TryLoadEntry(item.Source, structure, entry));
-
-                await foreach (var result in loadResult)
-                {
-                    if (result.Success)
-                    {
-                        var newItem = result.Item!;
-                        newItem.Identifier = item.Identifier;
-                        this._loadedContent.GetContentItem(newItem.Identifier!)!.UpdateContent(newItem.Source, newItem.Content);
-                        this._loadedContent.GetContentItem(newItem.Identifier!)!.SetLastModified(structure.GetLastWriteTimeForEntry(entry.EntryPath));
-                        entry.SetLastWriteTime(structure.GetLastWriteTimeForEntry(entry.EntryPath));
-                        this.ContentItemReloaded?.Invoke(this, new ContentItemReloadedEventArgs(stage, entry, newItem));
-                    }
-                }
+                var previousEntry = this._loadedContent.GetEntryForItem(updatedItem.Identifier);
+                previousEntry.LastWriteTime = updatedEntry.LastWriteTime;
             }
         }
     }
@@ -588,7 +344,7 @@ public class ContentManager<TMeta> where TMeta : ContentMetadata
     {
         foreach (var item in this._loadedContent.GetItems())
         {
-            item.Unload();
+            item.Content.Unload();
         }
     }
 }

@@ -54,20 +54,6 @@ public class EmbeddedStructure : IContentStructure
         return entries.Contains(entryPath);
     }
 
-    public bool TryGetEntry(string entryPath, [NotNullWhen(true)] out ContentEntry? entry)
-    {
-        if (HasEntry(entryPath))
-        {
-            entry = new ContentEntry(entryPath);
-            return true;
-        }
-        else
-        {
-            entry = null;
-            return false;
-        }
-    }
-
     public ContentEntry GetEntry(string entryPath)
     {
         return new ContentEntry(entryPath);
@@ -80,31 +66,14 @@ public class EmbeddedStructure : IContentStructure
         return entries.Select(x => new ContentEntry(x)).Where(x => filter?.Invoke(x) ?? true);
     }
 
-    public bool TryGetEntryStream(string entryPath, [NotNullWhen(true)] out ContentEntry? entry, [NotNullWhen(true)] out Stream? stream)
-    {
-        if (HasEntry(entryPath))
-        {
-            entry = new ContentEntry(entryPath);
-            stream = this._assembly.GetManifestResourceStream(entryPath.Replace('/', '.'))!;
-            return true;
-        }
-        else
-        {
-            entry = null;
-            stream = null;
-            return false;
-        }
-    }
-
-    public Stream GetEntryStream(string entryPath, out ContentEntry entry)
-    {
-        entry = new ContentEntry(entryPath);
-        return this._assembly.GetManifestResourceStream(entryPath.Replace('/', '.'))!;
-    }
-
     public DateTime GetLastWriteTimeForEntry(string entryPath)
     {
         var path = entryPath.Replace('/', '.');
         return File.GetLastWriteTime(this._assembly.Location);
+    }
+
+    public Stream GetEntryStream(string entryPath)
+    {
+        return this._assembly.GetManifestResourceStream(entryPath.Replace('/', '.'))!;
     }
 }

@@ -9,10 +9,9 @@ namespace Symphony;
 public interface IContentStructure : IDisposable
 {
     bool HasEntry(string entryPath);
-    bool TryGetEntry(string entryPath, [NotNullWhen(true)] out ContentEntry? entry);
     ContentEntry GetEntry(string entryPath);
-    IEnumerable<ContentEntry> GetEntries(Predicate<ContentEntry>? filter = null);
-    bool TryGetEntryStream(string entryPath, [NotNullWhen(true)] out ContentEntry? entry, [NotNullWhen(true)] out Stream? stream);
-    Stream GetEntryStream(string entryPath, out ContentEntry entry);
+    IEnumerable<ContentEntry> GetEntries(Predicate<ContentEntry> filter);
+    Stream GetEntryStream(string entryPath);
+
     DateTime GetLastWriteTimeForEntry(string entryPath);
 }

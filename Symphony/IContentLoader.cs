@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Threading.Tasks;
 
 namespace Symphony;
@@ -8,49 +9,49 @@ public struct LoadEntryResult
 {
     public bool Success { get; set; }
     public string? Error { get; set; }
-    public ContentItem? Item { get; set; }
-    public string? Identifier { get; set; }
+    public IContent? Content { get; set; }
+    public string? ItemIdentifier { get; set; }
 
-    public static LoadEntryResult CreateSuccess(string identifier, ContentItem item)
+    public static LoadEntryResult CreateSuccess(string itemIdentifier, IContent content)
     {
         return new LoadEntryResult
         {
-            Identifier = identifier,
+            ItemIdentifier = itemIdentifier,
             Success = true,
-            Item = item
+            Content = content
         };
     }
 
-    public static LoadEntryResult CreateFailure(string error)
+    public static LoadEntryResult CreateFailure(string itemIdentifier, string error)
     {
         return new LoadEntryResult
         {
+            ItemIdentifier = itemIdentifier,
             Success = false,
             Error = error
         };
     }
 
-    public static async Task<LoadEntryResult> CreateSuccessAsync(string identifier, ContentItem item)
+    public static async Task<LoadEntryResult> CreateSuccessAsync(string itemIdentifier, IContent content)
     {
-        return await Task.FromResult(CreateSuccess(identifier, item));
+        return await Task.FromResult(CreateSuccess(itemIdentifier, content));
     }
 
-    public static async Task<LoadEntryResult> CreateFailureAsync(string error)
+    public static async Task<LoadEntryResult> CreateFailureAsync(string itemIdentifier, string error)
     {
-        return await Task.FromResult(CreateFailure(error));
+        return await Task.FromResult(CreateFailure(itemIdentifier, error));
     }
 }
 
 public interface IContentLoadingStage
 {
     string StageName { get; }
-    IEnumerable<ContentEntry> GetAffectedEntries(IEnumerable<ContentEntry> allEntries);
-    void OnStageStarted();
-    IAsyncEnumerable<LoadEntryResult> TryLoadEntry(IContentSource source, IContentStructure structure, ContentEntry entry);
-    void OnStageCompleted();
+
+    bool IsEntryAffectedByStage(string entryPath);
+    IAsyncEnumerable<LoadEntryResult> LoadEntry(ContentEntry entry, Stream stream);
 }
 
-public interface IContentLoader<TMeta> where TMeta : ContentMetadata
+public interface IContentLoader
 {
     IEnumerable<IContentSource> GetSourceLoadOrder(IEnumerable<IContentSource> sources);
     IEnumerable<IContentLoadingStage> GetLoadingStages();

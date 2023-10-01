@@ -4,23 +4,13 @@ namespace Symphony;
 
 public sealed class ContentEntry
 {
-    private string _entryPath;
-    public string EntryPath
-    {
-        get => _entryPath;
-        private set => _entryPath = value.Replace('\\', '/');
-    }
-    public DateTime LastWriteTime { get; private set; }
+    private string _entryPath = "";
+    public string EntryPath { get => _entryPath; private set => _entryPath = value.Replace('\\', '/'); }
+    public DateTime LastWriteTime { get; set; }
 
     public ContentEntry(string entryPath)
     {
-        _entryPath = "";
         EntryPath = entryPath;
-    }
-
-    internal void SetLastWriteTime(DateTime lastWriteTime)
-    {
-        LastWriteTime = lastWriteTime;
     }
 
     public override string ToString()

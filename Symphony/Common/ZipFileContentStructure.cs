@@ -59,20 +59,6 @@ public class ZipFileContentStructure : IContentStructure
         return _archive.Entries.Any(x => x.FullName == forwardSlashed || x.FullName == backSlashed);
     }
 
-    public bool TryGetEntry(string entryPath, [NotNullWhen(true)] out ContentEntry? entry)
-    {
-        if (HasEntry(entryPath))
-        {
-            entry = new ContentEntry(entryPath);
-            return true;
-        }
-        else
-        {
-            entry = null;
-            return false;
-        }
-    }
-
     public ContentEntry GetEntry(string entryPath)
     {
         return new ContentEntry(entryPath);
@@ -83,26 +69,13 @@ public class ZipFileContentStructure : IContentStructure
         return _archive.Entries.Select(x => new ContentEntry(x.FullName)).Where(x => filter == null || filter(x));
     }
 
-    public bool TryGetEntryStream(string entryPath, [NotNullWhen(true)] out ContentEntry? entry, [NotNullWhen(true)] out Stream? stream)
+    public DateTime GetLastWriteTimeForEntry(string entryPath)
     {
-        if (HasEntry(entryPath))
-        {
-            entry = new ContentEntry(entryPath);
-            stream = GetEntryStream(entryPath, out _);
-            return true;
-        }
-        else
-        {
-            entry = null;
-            stream = null;
-            return false;
-        }
+        return File.GetLastWriteTime(_pathToZip);
     }
 
-    public Stream GetEntryStream(string entryPath, out ContentEntry entry)
+    public Stream GetEntryStream(string entryPath)
     {
-        entry = new ContentEntry(entryPath);
-
         var forwardSlashed = entryPath.Replace('\\', '/');
         var backSlashed = entryPath.Replace('/', '\\');
 
@@ -117,10 +90,5 @@ public class ZipFileContentStructure : IContentStructure
         }
 
         throw new FileNotFoundException("Could not find entry in zip file", entryPath);
-    }
-
-    public DateTime GetLastWriteTimeForEntry(string entryPath)
-    {
-        return File.GetLastWriteTime(_pathToZip);
     }
 }
